@@ -103,11 +103,12 @@ function spawnProbeProcess(file, playlistPath) {
 	
 	var playlistPath = path.join(outputPath, playlistFileName);
 	var writeStream = fs.createWriteStream(playlistPath);
-	var duration = minSegment * 2;
+	var duration = minSegment * 1.2;
 	writeStream.write('#EXTM3U\n');
 	writeStream.write('#EXT-X-VERSION:3\n');
 	writeStream.write('#EXT-X-MEDIA-SEQUENCE:0\n');
 	writeStream.write('#EXT-X-ALLOW-CACHE:YES\n');
+	writeStream.write('#EXT-X-PLAYLIST-TYPE:EVENT\n');
 	writeStream.write('#EXT-X-TARGETDURATION:' + duration + '\n');
 	var lastEnd = 0.0;
 	var index = 0;
@@ -115,7 +116,7 @@ function spawnProbeProcess(file, playlistPath) {
 		var tmp=data.split('=');
 		if (tmp.length == 2) {
 			var pkt_time = parseFloat(tmp[1]);
-			if (pkt_time - lastEnd >= minSegment) {
+			if (pkt_time - lastEnd >= minSegment * 0.9) {
 				var duration = pkt_time - lastEnd;
 				var durationStr = duration.toFixed(2);
 				writeStream.write('#EXTINF:' + durationStr + ',\n');
