@@ -319,7 +319,7 @@ function handleSegmentRequest(index, start, duration, file, response){
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
 		'-async', '1', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-1', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'superfast',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'superfast',
 		'-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
@@ -472,7 +472,7 @@ function handleThumbnailRequest(file, response) {
 
 	// http://superuser.com/questions/538112/meaningful-thumbnails-for-a-video-using-ffmpeg
 	//var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=gt(scene\,0.4)', '-vf', 'scale=iw/2:-1,crop=iw:iw/2', '-f', 'image2pipe', '-vframes', '1', '-'];
-	var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=eq(pict_type\\,PICT_TYPE_I),scale=640:-1,tile=2x2', '-f', 'image2pipe', '-vframes', '1', '-'];
+	var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=eq(pict_type\\,PICT_TYPE_I),scale=640:-2,tile=2x2', '-f', 'image2pipe', '-vframes', '1', '-'];
 
 	if (debug) console.log('Spawning thumb process');
 
