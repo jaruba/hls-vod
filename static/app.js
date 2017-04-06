@@ -170,10 +170,10 @@ $(function() {
 		$('#settings-container').fadeToggle();
 	});
 
-	$('#settings-container select[name=videoBitrate]').change(function() {
+	$('#settings-container select[name=videoWidth]').change(function() {
 		$.ajax('/settings', {
 			data: {
-				videoBitrate: $(this).val()
+				videoWidth: $(this).val()
 			},
 			type: 'POST',
 			error: function() {
@@ -183,7 +183,7 @@ $(function() {
 	});
 
 	$.get('/settings', function(data) {
-		$('#settings-container select[name=videoBitrate]').val(data.videoBitrate);
+		$('#settings-container select[name=videoWidth]').val(data.videoWidth);
 	});
 	
 	

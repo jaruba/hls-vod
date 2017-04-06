@@ -1,5 +1,6 @@
 var childProcess = require('child_process');
 var http = require('http');
+var https = require('https');
 var url = require('url');
 var fs = require('fs');
 var path = require('path');
@@ -16,7 +17,7 @@ var socketIo = require('socket.io');
 
 // Parameters
 var listenPort = 4040;
-var videoBitrate = 1000;
+var videoBitrate = 737;
 var audioBitrate = 128;
 var targetWidth = 640;
 var searchPaths = [];
@@ -38,6 +39,7 @@ var encoderProcesses = {};
 var probeProcesses = {};
 var currentFile = null;
 var lock = false;
+var encodingStartTime = null;
 var io = null;
 
 // We have to apply some hacks to the playlist
@@ -54,8 +56,13 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 			foundPlaylistType = true;
 		}
 		
-		eachLine(line);
-
+		// Due to what seems like a bug in Apples implementation, if #EXT-X-ENDLIST is included too fast, it seems the player will hang. Removing it will cause the player to re-fetch the playlist once more, which seems to prevent the bug.
+ 		if (line.match('^#EXT-X-ENDLIST') && new Date().getTime() - encodingStartTime.getTime() < playlistEndMinTime) {
+			console.log('File was encoded too fast, skiping END tag');
+		}
+		else {
+			eachLine(line);
+		}
 	});
 	rl.on('close', function() {
 		if (debug) console.log('Done reading lines');
@@ -266,6 +273,8 @@ function handlePlaylistRequest(file, response) {
 		lock = true;
 
 		console.log('New file to encode chosen');
+
+		encodingStartTime = new Date();
 
 		function startNewProbe() {
 			fs.unlink(playlistPath, function (err) {
@@ -672,7 +681,11 @@ function init() {
 
 function initExpress() {
 	var app = express();
-	var server = http.Server(app);
+	var options = {
+		key: fs.readFileSync('key.pem'),
+		cert: fs.readFileSync('chain.pem')
+	};
+	var server = https.createServer(options, app);
 	io = socketIo(server);
 
 	app.use(bodyParser.urlencoded({extended: false}));
@@ -720,9 +733,11 @@ function initExpress() {
 	app.post(/^\/settings/, function(request, response) {
 		console.log(request.body);
 
-		var newBitrate = request.body.videoBitrate;
-		if (newBitrate) {
-			videoBitrate = parseInt(newBitrate);
+		var newWidth = request.body.videoWidth;
+		if (newWidth) {
+			targetWidth = parseInt(newWidth);
+			videoBitrate = targetWidth * targetWidth * 0.05 * 25 / 1000;
+			videoBitrate = parseInt(videoBitrate.toFixed(0));
 		}
 
 		response.end();
@@ -731,7 +746,7 @@ function initExpress() {
 	app.get(/^\/settings/, function(request, response) {
 		response.setHeader('Content-Type', 'application/json');
 		response.write(JSON.stringify({
-			'videoBitrate': videoBitrate
+			'videoWidth': targetWidth
 		}));
 		response.end();
 	});
