@@ -31,11 +31,12 @@ var playlistRetryDelay = 500;
 var playlistRetryTimeout = 60000;
 var playlistEndMinTime = 20000;
 var minSegment = 10.0;
+var cert = null;
+var key = null;
 var videoExtensions = ['.mp4','.3gp2','.3gp','.3gpp', '.3gp2','.amv','.asf','.avs','.dat','.dv', '.dvr-ms','.f4v','.m1v','.m2p','.m2ts','.m2v', '.m4v','.mkv','.mod','.mp4','.mpe','.mpeg1', '.mpeg2','.divx','.mpeg4','.mpv','.mts','.mxf', '.nsv','.ogg','.ogm','.mov','.qt','.rv','.tod', '.trp','.tp','.vob','.vro','.wmv','.web,', '.rmvb', '.rm','.ogv','.mpg', '.avi', '.mkv', '.wmv', '.asf', '.m4v', '.flv', '.mpg', '.mpeg', '.mov', '.vob', '.ts', '.webm'];
 var audioExtensions = ['.mp3', '.aac', '.m4a'];
 
 // Program state
-var encoderProcesses = {};
 var probeProcesses = {};
 var currentFile = null;
 var lock = false;
@@ -57,7 +58,7 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 		}
 		
 		// Due to what seems like a bug in Apples implementation, if #EXT-X-ENDLIST is included too fast, it seems the player will hang. Removing it will cause the player to re-fetch the playlist once more, which seems to prevent the bug.
- 		if (line.match('^#EXT-X-ENDLIST') && new Date().getTime() - encodingStartTime.getTime() < playlistEndMinTime) {
+		if (line.match('^#EXT-X-ENDLIST') && new Date().getTime() - encodingStartTime.getTime() < playlistEndMinTime) {
 			console.log('File was encoded too fast, skiping END tag');
 		}
 		else {
@@ -69,13 +70,6 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 		done();
 	});
 }
-
-function updateActiveTranscodings() {
-	io.emit('updateActiveTranscodings', _.map(encoderProcesses, function(it) {
-		return it.pid;
-	}));
-}
-
 
 function spawnProbeProcess(file, playlistPath) {
 	var playlistFileName = 'stream.m3u8';
@@ -298,44 +292,6 @@ function handlePlaylistRequest(file, response) {
 	}
 }
 
-function pollForSegment(segmentPath, response, segmentFile) {
-	var numTries = 0;
-	function retry() {
-		numTries++;
-		if (debug) console.log('Retrying segment file...');
-		setTimeout(tryOpenFile, playlistRetryDelay);
-	}
-
-	function tryOpenFile() {
-		if (numTries > playlistRetryTimeout/playlistRetryDelay) {
-			console.log('Whoops! Gave up trying to open segment file');
-			response.writeHead(500);
-			response.end();
-		}
-		else {
-			if (encoderProcesses[segmentFile]) {
-				retry();
-			} else {
-				if (debug) console.log('Read segment file...');
-				
-				fs.readFile(segmentPath, function(err, content) {
-					if (!err) {
-						response.writeHead(200);
-						response.write(content);
-					}
-					else {
-						response.writeHead(500);
-					}
-					response.end();
-				});
-			}
-			
-		}
-	}
-
-	tryOpenFile();
-	
-}
 
 function convertSecToTime(sec){
 	var date = new Date(null);
@@ -348,8 +304,15 @@ function convertSecToTime(sec){
 	return result;
 }
 
+function handleSegmentRequest(index, start, duration, file, response){
+	if (debug)
+		console.log('Segment request: ' + file)
 
-function spawnSegmentProcess(file, start, duration, segmentPath){
+	if (!file) {
+		response.writeHead(400);
+		response.end();
+	}
+
 	var startTime = convertSecToTime(start);
 	var durationTime = convertSecToTime(duration);
 	var args = [
@@ -359,25 +322,27 @@ function spawnSegmentProcess(file, start, duration, segmentPath){
 		'-vf', 'scale=min(' + targetWidth + '\\, iw):-1', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'superfast',
 		'-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
-		'-f', 'mpegts', '-copyts', '-muxdelay', '0', segmentPath
-		//'-f', 'segment',
-		//'-initial_offset', startTime, '-segment_time', durationTime,
-		//'-segment_format', 'mpegts', '-segment_list_flags', 'live', segmentPath
+		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
 	];
 	var encoderChild = childProcess.spawn(transcoderPath, args, {cwd: outputPath, env: process.env});
 
 	console.log('Spawned encoder instance');
+	
 	if (debug) 
 		console.log(transcoderPath + ' ' + args.join(' '));
 
-	encoderProcesses[segmentPath] = encoderChild;
-// 	updateActiveTranscodings();
-
+	response.writeHead(200);
+	
 	if (debug) {
 		encoderChild.stderr.on('data', function(data) {
 			console.log(data.toString());
 		});
 	}
+	
+	encoderChild.stdout.on('data', function(data) {
+		response.write(data);
+	});
+	
 	encoderChild.on('exit', function(code) {
 		if (code == 0) {
 			console.log('Encoder completed');
@@ -385,36 +350,7 @@ function spawnSegmentProcess(file, start, duration, segmentPath){
 		else {
 			console.log('Encoder exited with code ' + code);
 		}
-
-		delete encoderProcesses[segmentPath];
-// 		updateActiveTranscodings();
-	});
-
-	// Kill any "zombie" processes
-	setTimeout(function() {
-		if (encoderProcesses[segmentPath]) {
-			console.log('Killing long running process');
-			killProcess(encoderProcesses[segmentPath]);
-		}
-	}, processCleanupTimeout);
-}
-
-function handleSegmentRequest(index, start, duration, file, response){
-	//if (debug)
-		console.log('Segment request: ' + file)
-
-	if (!file) {
-		response.writeHead(400);
 		response.end();
-	}
-
-	var segmentFile = 'stream' + index + '.ts';
-	var segmentPath = path.join(outputPath, segmentFile);
-	
-
-	fs.unlink(segmentPath, function (err) {
-		spawnSegmentProcess(file, start, duration, segmentFile);
-		pollForSegment(segmentPath, response, segmentFile);
 	});
 }
 
@@ -653,6 +589,20 @@ function init() {
 			listenPort = parseInt(process.argv[++i]);
 			break;
 
+			case '--cert':
+			if (process.argv.length <= i+1) {
+				exitWithUsage(process.argv);
+			}
+			cert = process.argv[++i];
+			break;
+
+			case '--key':
+			if (process.argv.length <= i+1) {
+				exitWithUsage(process.argv);
+			}
+			key = process.argv[++i];
+			break;
+			
 			case '--debug':
 				debug = true;
 			break;
@@ -681,11 +631,18 @@ function init() {
 
 function initExpress() {
 	var app = express();
-	var options = {
-		key: fs.readFileSync('key.pem'),
-		cert: fs.readFileSync('chain.pem')
-	};
-	var server = https.createServer(options, app);
+	var server;
+	if (cert && key)
+	{
+		var options = {
+			key: fs.readFileSync(key),
+			cert: fs.readFileSync(cert)
+		};
+		server = https.createServer(options, app);
+	} else {
+		server = http.createServer(app);
+	}
+	
 	io = socketIo(server);
 
 	app.use(bodyParser.urlencoded({extended: false}));
