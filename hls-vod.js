@@ -29,7 +29,7 @@ var processCleanupTimeout = 6 * 60 * 60 * 1000;
 var debug = false;
 var playlistRetryDelay = 500;
 var playlistRetryTimeout = 60000;
-var playlistEndMinTime = 20000;
+var playlistEndMinTime = 60000;
 var minSegment = 10.0;
 var cert = null;
 var key = null;
@@ -323,7 +323,7 @@ function handleSegmentRequest(index, start, duration, file, response){
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
 		'-async', '1', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'superfast',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'main', '-preset:v' ,'medium',
 		'-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
