@@ -358,6 +358,15 @@ function handleSegmentRequest(index, start, duration, file, response){
 		}
 		response.end();
 	});
+	
+	// Kill any "zombie" processes
+	setTimeout(function() {
+		if (encoderChild) {
+			console.log('Killing long running process');
+
+			killProcess(encoderChild);
+		}
+	}, minSegment * 5);
 }
 
 function listFiles(response) {
