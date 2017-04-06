@@ -35,7 +35,7 @@ var cert = null;
 var key = null;
 var videoExtensions = ['.mp4','.3gp2','.3gp','.3gpp', '.3gp2','.amv','.asf','.avs','.dat','.dv', '.dvr-ms','.f4v','.m1v','.m2p','.m2ts','.m2v', '.m4v','.mkv','.mod','.mp4','.mpe','.mpeg1', '.mpeg2','.divx','.mpeg4','.mpv','.mts','.mxf', '.nsv','.ogg','.ogm','.mov','.qt','.rv','.tod', '.trp','.tp','.vob','.vro','.wmv','.web,', '.rmvb', '.rm','.ogv','.mpg', '.avi', '.mkv', '.wmv', '.asf', '.m4v', '.flv', '.mpg', '.mpeg', '.mov', '.vob', '.ts', '.webm'];
 var audioExtensions = ['.mp3', '.aac', '.m4a'];
-
+var imageExtensions = ['.jpg', '.png', '.bmp', '.jpeg', '.gif'];
 // Program state
 var probeProcesses = {};
 var currentFile = null;
@@ -69,6 +69,10 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 		if (debug) console.log('Done reading lines');
 		done();
 	});
+}
+
+function updateActiveTranscodings() {
+	io.emit('updateActiveTranscodings', 1);
 }
 
 function spawnProbeProcess(file, playlistPath) {
@@ -449,6 +453,10 @@ function browseDir(browsePath, response) {
 							fileObj.type = 'audio';
 							fileObj.path = path.join('/audio/' + relPath);
 						}
+						else if (imageExtensions.indexOf(extName) != -1) {
+							fileObj.type = 'image';
+							fileObj.path = path.join('/image/' + relPath);
+						}
 
 						fileObj.relPath = path.join('/', relPath);
 					}
@@ -534,7 +542,13 @@ function handleAudioRequest(relPath, request, response) {
 	encoderChild.stdout.pipe(response);
 }
 
-
+function handleImageRequest(relPath, request, response) {
+	var file = path.join('/', relPath);
+	var filePath = path.join(rootPath, file);
+	var readStream = fs.createReadStream(filePath);
+	response.writeHead(200);
+	readStream.pipe(response);
+}
 
 
 function init() {
@@ -687,6 +701,11 @@ function initExpress() {
 		handleAudioRequest(relPath, request, response);
 	});
 
+	app.get(/^\/image\//, function(request, response) {
+		var relPath = path.relative('/image/', decodeURIComponent(request.path));
+		handleImageRequest(relPath, request, response);
+	});
+		
 	app.post(/^\/settings/, function(request, response) {
 		console.log(request.body);
 

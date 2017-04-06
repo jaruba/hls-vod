@@ -22,6 +22,10 @@ $(function() {
 			$videoContainer.hide();
 		}
 	}
+	
+	function imageShow(path, name) {
+		window.open(path);
+	}
 
 	function audioPlay(path, name) {
 		$('#audio-song-name').text(name);
@@ -55,12 +59,12 @@ $(function() {
 			$video[0].src = path;
 			$video.mediaelementplayer({
 				success: function (mediaElement2, domObject) {
-			        mediaElement = mediaElement2;
+					mediaElement = mediaElement2;
 					mediaElement.play();
-			    },
-			    error: function (mediaeElement, err) { 
+				},
+				error: function (mediaeElement, err) { 
 					console.log('Error loading media element');
-			    }
+				}
 			});
 		}
 	}
@@ -128,7 +132,11 @@ $(function() {
 							audioPlay(file.path, file.name);
 						});
 						break;
-
+					case 'image':
+						elem.click(function() {
+							imageShow(file.path, file.name);
+						});
+						break;
 					case 'directory':
 						elem.click(function() {
 							browseTo(file.path);
