@@ -103,11 +103,12 @@ function spawnProbeProcess(file, playlistPath) {
 	
 	var playlistPath = path.join(outputPath, playlistFileName);
 	var writeStream = fs.createWriteStream(playlistPath);
+	var duration = minSegment * 2;
 	writeStream.write('#EXTM3U\n');
 	writeStream.write('#EXT-X-VERSION:3\n');
 	writeStream.write('#EXT-X-MEDIA-SEQUENCE:0\n');
-	writeStream.write('#EXT-X-ALLOW-CACHE:NO\n');
-	writeStream.write('#EXT-X-TARGETDURATION:' + minSegment + '\n');
+	writeStream.write('#EXT-X-ALLOW-CACHE:YES\n');
+	writeStream.write('#EXT-X-TARGETDURATION:' + duration + '\n');
 	var lastEnd = 0.0;
 	var index = 0;
 	rl.on('line', function (data) {
