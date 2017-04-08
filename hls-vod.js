@@ -77,7 +77,7 @@ function updateActiveTranscodings() {
 
 function spawnProbeProcess(file, playlistPath) {
 	var playlistFileName = 'stream.m3u8';
-
+	var hash = new Buffer(file).toString('base64');
 	var args = [
 		'-i', file, '-show_frames', 
 		'-skip_frame', 'nokey',
@@ -120,7 +120,7 @@ function spawnProbeProcess(file, playlistPath) {
 				var duration = pkt_time - lastEnd;
 				var durationStr = duration.toFixed(2);
 				writeStream.write('#EXTINF:' + durationStr + ',\n');
-				var segment = 'stream-' + index + '_' + lastEnd + '_' + durationStr + '_' + file + '.ts';
+				var segment = encodeURIComponent('stream-' + index + '_' + lastEnd + '_' + durationStr + '_' + hash + '.ts');
 				writeStream.write(segment + '\n');
 //     			console.log(segment);
 				lastEnd = pkt_time;
@@ -311,6 +311,7 @@ function convertSecToTime(sec){
 }
 
 function handleSegmentRequest(index, start, duration, file, response){
+	file = new Buffer(file, 'base64').toString('utf8');
 	if (debug)
 		console.log('Segment request: ' + file)
 
@@ -324,7 +325,7 @@ function handleSegmentRequest(index, start, duration, file, response){
 	var args = [
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
-		'-async', '1', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
+		'-async', '0', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
 		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'main', '-preset:v' ,'medium',
 		'-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
@@ -359,14 +360,6 @@ function handleSegmentRequest(index, start, duration, file, response){
 		response.end();
 	});
 	
-	// Kill any "zombie" processes
-	setTimeout(function() {
-		if (encoderChild) {
-			console.log('Killing long running process');
-
-			killProcess(encoderChild);
-		}
-	}, minSegment * 5);
 }
 
 function listFiles(response) {
@@ -455,18 +448,18 @@ function browseDir(browsePath, response) {
 					else if (stats.isFile()) {
 						var relPath = path.join(browsePath, file);
 						var extName = path.extname(file);
-
 						if (videoExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'video';
 							fileObj.path = '/hls/file-' + encodeURIComponent(relPath) + '.m3u8';
 						}
 						else if (audioExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'audio';
-							fileObj.path = path.join('/audio/' + relPath);
+							fileObj.path = path.join('/audio/' + encodeURIComponent(relPath));
 						}
 						else if (imageExtensions.indexOf(extName) != -1) {
+							relPath = Buffer.from(relPath).toString('base64');
 							fileObj.type = 'image';
-							fileObj.path = path.join('/image/' + relPath);
+							fileObj.path = path.join('/image/' + encodeURIComponent(relPath));
 						}
 
 						fileObj.relPath = path.join('/', relPath);
@@ -714,6 +707,7 @@ function initExpress() {
 
 	app.get(/^\/image\//, function(request, response) {
 		var relPath = path.relative('/image/', decodeURIComponent(request.path));
+		relPath = Buffer.from(relPath, 'base64').toString('utf8');
 		handleImageRequest(relPath, request, response);
 	});
 		
