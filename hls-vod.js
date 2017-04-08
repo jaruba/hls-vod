@@ -58,12 +58,12 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 		}
 		
 		// Due to what seems like a bug in Apples implementation, if #EXT-X-ENDLIST is included too fast, it seems the player will hang. Removing it will cause the player to re-fetch the playlist once more, which seems to prevent the bug.
-		if (line.match('^#EXT-X-ENDLIST') && new Date().getTime() - encodingStartTime.getTime() < playlistEndMinTime) {
-			console.log('File was encoded too fast, skiping END tag');
-		}
-		else {
+		//if (line.match('^#EXT-X-ENDLIST') && new Date().getTime() - encodingStartTime.getTime() < playlistEndMinTime) {
+		//	console.log('File was encoded too fast, skiping END tag');
+		//}
+		//else {
 			eachLine(line);
-		}
+		//}
 	});
 	rl.on('close', function() {
 		if (debug) console.log('Done reading lines');
@@ -103,7 +103,7 @@ function spawnProbeProcess(file, playlistPath) {
 	
 	var playlistPath = path.join(outputPath, playlistFileName);
 	var writeStream = fs.createWriteStream(playlistPath);
-	var duration = minSegment * 1.2;
+	var duration = minSegment * 1.1;
 	writeStream.write('#EXTM3U\n');
 	writeStream.write('#EXT-X-VERSION:3\n');
 	writeStream.write('#EXT-X-MEDIA-SEQUENCE:0\n');
@@ -120,7 +120,7 @@ function spawnProbeProcess(file, playlistPath) {
 				var duration = pkt_time - lastEnd;
 				var durationStr = duration.toFixed(2);
 				writeStream.write('#EXTINF:' + durationStr + ',\n');
-				var segment = encodeURIComponent('stream-' + index + '_' + lastEnd + '_' + durationStr + '_' + hash + '.ts');
+				var segment = encodeURIComponent('stream-' + index + '_' + lastEnd + '_' + durationStr + '_0_' + hash + '.ts');
 				writeStream.write(segment + '\n');
 //     			console.log(segment);
 				lastEnd = pkt_time;
@@ -310,7 +310,7 @@ function convertSecToTime(sec){
 	return result;
 }
 
-function handleSegmentRequest(index, start, duration, file, response){
+function handleSegmentRequest(index, start, duration, speed, file, request, response){
 	file = new Buffer(file, 'base64').toString('utf8');
 	if (debug)
 		console.log('Segment request: ' + file)
@@ -319,14 +319,45 @@ function handleSegmentRequest(index, start, duration, file, response){
 		response.writeHead(400);
 		response.end();
 	}
-
+	speed = parseInt(speed);
+	var atempo = ['atempo=1.0'];
+	var setpts = 1.0;
+	switch(speed) {
+		case 4:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 3:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 2:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 1:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+			break;
+		case -3:
+			atempo.push('atempo=0.5');
+			setpts = setpts * 2;
+		case -2:
+			atempo.push('atempo=0.5');
+			setpts = setpts * 2;
+		case -1:
+			atempo.push('atempo=0.5');
+			setpts = setpts * 2;
+			break;
+		default:
+			break;
+	}
+	var atempo_opt = atempo.lenght ? atempo.join(',') : 'anull';
+	var setpts_opt = setpts.toFixed(4);
 	var startTime = convertSecToTime(start);
 	var durationTime = convertSecToTime(duration);
 	var args = [
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
-		'-async', '0', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'main', '-preset:v' ,'medium',
+		'-async', '0', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2', '-af', atempo_opt,
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '25', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'medium',
 		'-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
@@ -360,6 +391,13 @@ function handleSegmentRequest(index, start, duration, file, response){
 		response.end();
 	});
 	
+	request.on('close', function() {
+		encoderChild.kill();
+		setTimeout(function() {
+			encoderChild.kill('SIGKILL');
+		}, 5000);
+	});
+
 }
 
 function listFiles(response) {
@@ -679,9 +717,9 @@ function initExpress() {
 		handlePlaylistRequest(filePath, response);
 	});
 
-	app.get(/^\/hls\/stream-([0-9]+)_([0-9\.]+)_([0-9\.]+)_(.+).ts/, function(request, response) {
-		var filePath = decodeURIComponent(request.params[3]);
-		handleSegmentRequest(request.params[0], request.params[1], request.params[2], filePath, response);
+	app.get(/^\/hls\/stream-([0-9]+)_([0-9\.]+)_([0-9\.]+)_(\-*[0-9]+)_(.+).ts/, function(request, response) {
+		var filePath = decodeURIComponent(request.params[4]);
+		handleSegmentRequest(request.params[0], request.params[1], request.params[2], request.params[3], filePath, request, response);
 	});
 
 	app.get(/^\/thumbnail\//, function(request, response) {
