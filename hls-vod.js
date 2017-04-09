@@ -319,8 +319,9 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 		response.writeHead(400);
 		response.end();
 	}
+
 	speed = parseInt(speed);
-	var atempo = ['atempo=1.0'];
+	var atempo = [];
 	var setpts = 1.0;
 	switch(speed) {
 		case 4:
@@ -349,7 +350,7 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 		default:
 			break;
 	}
-	var atempo_opt = atempo.lenght ? atempo.join(',') : 'anull';
+	var atempo_opt = atempo.length ? atempo.join(',') : 'anull';
 	var setpts_opt = setpts.toFixed(4);
 	var startTime = convertSecToTime(start);
 	var durationTime = convertSecToTime(duration);

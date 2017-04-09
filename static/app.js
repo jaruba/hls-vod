@@ -58,6 +58,12 @@ $(function() {
 			var $video = $('#video');
 			$video[0].src = path;
 			$video.mediaelementplayer({
+                hls: {
+                    path : 'hls.js/dist/hls.js',
+                    startPosition : 0,
+                    debug: true,
+                    autoStartLoad: true
+                },
 				success: function (mediaElement2, domObject) {
 					mediaElement = mediaElement2;
 					mediaElement.play();
