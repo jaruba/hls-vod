@@ -25,7 +25,7 @@ var rootPath = null;
 var outputPath = './cache';
 var transcoderPath = 'ffmpeg';
 var probePath = 'ffprobe';
-var processCleanupTimeout = 6 * 60 * 60 * 1000;
+var processCleanupTimeout = 1 * 60 * 60 * 1000;
 var debug = false;
 var playlistRetryDelay = 500;
 var playlistRetryTimeout = 60000;
@@ -279,20 +279,14 @@ function handlePlaylistRequest(file, response) {
 		function startNewProbe() {
 			if (!fs.existsSync(playlistPath)) {
 				spawnProbeProcess(file, playlistPath, outputPath);
-
 			}
 			pollForPlaylist(file, response, playlistPath);
 			lock = false;
 
 		}
+		
+		startNewProbe();
 
-		// Make sure old one gets killed
-		if (probeProcesses[currentFile]) {
-			killProcess(probeProcesses[currentFile], startNewProbe);
-		}
-		else {
-			startNewProbe();
-		}
 	}
 	else {
 		console.log('We are already encoding this file');
