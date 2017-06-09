@@ -76,7 +76,7 @@ function updateActiveTranscodings() {
 }
 
 function spawnProbeProcess(file, playlistPath) {
-	var playlistFileName = 'stream.m3u8';
+	var playlistFileName = file + '_hls.m3u8'; //'stream.m3u8';
 	var hash = new Buffer(file).toString('base64');
 	var args = [
 		'-i', file, '-show_frames', 
@@ -101,7 +101,7 @@ function spawnProbeProcess(file, playlistPath) {
 		});
 	}
 	
-	var playlistPath = path.join(outputPath, playlistFileName);
+	var playlistPath = file + '_hls.m3u8'; //path.join(outputPath, playlistFileName);
 	var writeStream = fs.createWriteStream(playlistPath);
 	var duration = minSegment * 1.1;
 	writeStream.write('#EXTM3U\n');
@@ -267,7 +267,7 @@ function handlePlaylistRequest(file, response) {
 
 	file = path.join('/', file); // Remove ".." etc
 	file = path.join(rootPath, file);
-	var playlistPath = path.join(outputPath, '/stream.m3u8');
+	var playlistPath = file + '_hls.m3u8'; //path.join(outputPath, '/stream.m3u8');
 
 	if (currentFile != file) {
 		lock = true;
@@ -277,11 +277,13 @@ function handlePlaylistRequest(file, response) {
 		encodingStartTime = new Date();
 
 		function startNewProbe() {
-			fs.unlink(playlistPath, function (err) {
+			if (!fs.existsSync(playlistPath)) {
 				spawnProbeProcess(file, playlistPath, outputPath);
-				pollForPlaylist(file, response, playlistPath);
-				lock = false;
-			});
+
+			}
+			pollForPlaylist(file, response, playlistPath);
+			lock = false;
+
 		}
 
 		// Make sure old one gets killed

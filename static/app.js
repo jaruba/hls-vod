@@ -208,7 +208,13 @@ $(function() {
 		updateActiveTranscodings();
 	});
 	
-	browseTo('/');
+	var url = $(location).attr('href');
+	var param = url.split('?path=');
+	if (param.length == 2) {
+		browseTo(param[1]);
+	} else {
+		browseTo('/');
+	}
 	
 	$videoContainer.hide();
 	$audioContainer.hide();
