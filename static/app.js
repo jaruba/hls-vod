@@ -58,12 +58,14 @@ $(function() {
 			var $video = $('#video');
 			$video[0].src = path;
 			$video.mediaelementplayer({
-                hls: {
-                    path : 'hls.js/dist/hls.js',
-                    startPosition : 0,
-                    debug: true,
-                    autoStartLoad: true
-                },
+				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'speed', 'fullscreen'],
+				clickToPlayPause: false,
+				hls: {
+					path : 'hls.js/dist/hls.js',
+					startPosition : 0,
+					debug: false,
+					autoStartLoad: true
+				},
 				success: function (mediaElement2, domObject) {
 					mediaElement = mediaElement2;
 					mediaElement.play();
@@ -105,6 +107,13 @@ $(function() {
 
 		var $fileList = $('#file-list');
 		
+		if (window.history && window.history.pushState) {
+			window.history.pushState('forward', null, './#view');
+			$(window).on('popstate', function() {
+				$("#back").click();
+			});
+		}
+	
 		$.ajax('/browse' + path, {
 			success: function(data) {
 				loading = false;
@@ -113,7 +122,7 @@ $(function() {
 
 				$fileList.empty();
 
-				var back = $('<li/>');
+				var back = $('<li id="back"/>');
 				back.html('..');
 				back.click(function() {
 					browseTo(data.cwd != '/' ? path + '/..' : path);
@@ -162,6 +171,14 @@ $(function() {
 							event.stopPropagation();
 						});
 						elem.append(rawLink);
+						var delLink = $('<a style="color: inherit; margin-left: 1em; padding: 1em" />').attr('href', '/del' + file.relPath).text('DEL');
+						delLink.click(function(event) {
+							if (window.confirm("Are you sure?")) {
+								$.get(this.href);
+							}
+							return false;
+						});
+						elem.append(delLink);
 					}
 
 					if (file.type == 'video') {
@@ -196,10 +213,22 @@ $(function() {
 		});
 	});
 
+        $('#settings-container select[name=videoQuality]').change(function() {
+		$.ajax('/settings', {
+			data: {
+				videoQuality: $(this).val()
+			},
+			type: 'POST',
+			error: function() {
+				alert('Failed');
+			}
+		});
+	});
+
 	$.get('/settings', function(data) {
 		$('#settings-container select[name=videoWidth]').val(data.videoWidth);
+		$('#settings-container select[name=videoQuality]').val(data.videoQuality);
 	});
-	
 	
 	var socket = io.connect();
 

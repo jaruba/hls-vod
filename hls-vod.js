@@ -17,9 +17,9 @@ var socketIo = require('socket.io');
 
 // Parameters
 var listenPort = 4040;
-var videoBitrate = 737;
 var audioBitrate = 128;
 var targetWidth = 640;
+var targetQuality = 23
 var searchPaths = [];
 var rootPath = null;
 var outputPath = './cache';
@@ -258,37 +258,56 @@ function handlePlaylistRequest(file, response) {
 		response.end();
 	}
 
-	if (lock) {
-		console.log('Ongoing spawn process not finished, denying request');
-		response.writeHead(503);
-		response.end();
-		return;
-	}
+// 	if (lock) {
+// 		console.log('Ongoing spawn process not finished, denying request');
+// 		response.writeHead(503);
+// 		response.end();
+// 		return;
+// 	}
 
 	file = path.join('/', file); // Remove ".." etc
 	file = path.join(rootPath, file);
 	var playlistPath = file + '_hls.m3u8'; //path.join(outputPath, '/stream.m3u8');
 
 	if (currentFile != file) {
-		lock = true;
+// 		lock = true;
 
 		console.log('New file to encode chosen');
 
 		encodingStartTime = new Date();
 
 		function startNewProbe() {
-			if (!fs.existsSync(playlistPath)) {
+			if (fs.existsSync(playlistPath)) {
+				var done = false;
+				var readStream = fs.createReadStream(playlistPath);
+				withModifiedPlaylist(readStream, function(line) {
+					if (line.match('^#EXT-X-ENDLIST')) {
+						done = true;
+					}
+				}, function() {
+					if (done) {
+						pollForPlaylist(file, response, playlistPath);
+					} else if (probeProcesses[file]) {
+						console.log('Probing');
+						pollForPlaylist(file, response, playlistPath);
+					} else {
+						console.log('Reprobe');
+						fs.unlink(playlistPath, function(err){
+							spawnProbeProcess(file, playlistPath, outputPath);
+							pollForPlaylist(file, response, playlistPath);
+						});
+					}
+				});
+			} else {
 				spawnProbeProcess(file, playlistPath, outputPath);
+				pollForPlaylist(file, response, playlistPath);
 			}
-			pollForPlaylist(file, response, playlistPath);
-			lock = false;
 
 		}
 		
 		startNewProbe();
 
-	}
-	else {
+	} else {
 		console.log('We are already encoding this file');
 		pollForPlaylist(file, response, playlistPath);
 	}
@@ -353,9 +372,9 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 	var args = [
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
-		'-async', '0', '-acodec', 'libmp3lame', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2', '-af', atempo_opt,
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '25', '-b:v', videoBitrate + 'k', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'medium',
-		'-x264opts', 'level=3.0',
+		'-async', '0', '-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2', '-af', 'asetpts=' + setpts_opt + '*PTS',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'ultrafast',
+		'-crf', targetQuality, '-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
 	];
@@ -368,7 +387,7 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 
 	response.writeHead(200);
 	
-	if (debug) {
+	if (1) {
 		encoderChild.stderr.on('data', function(data) {
 			console.log(data.toString());
 		});
@@ -482,7 +501,7 @@ function browseDir(browsePath, response) {
 					}
 					else if (stats.isFile()) {
 						var relPath = path.join(browsePath, file);
-						var extName = path.extname(file);
+						var extName = path.extname(file).toLowerCase();
 						if (videoExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'video';
 							fileObj.path = '/hls/file-' + encodeURIComponent(relPath) + '.m3u8';
@@ -519,7 +538,7 @@ function handleThumbnailRequest(file, response) {
 
 	// http://superuser.com/questions/538112/meaningful-thumbnails-for-a-video-using-ffmpeg
 	//var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=gt(scene\,0.4)', '-vf', 'scale=iw/2:-1,crop=iw:iw/2', '-f', 'image2pipe', '-vframes', '1', '-'];
-	var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=eq(pict_type\\,PICT_TYPE_I),scale=640:-2,tile=2x2', '-f', 'image2pipe', '-vframes', '1', '-'];
+	var args = ['-ss', '00:00:20', '-i', fsPath, '-vf', 'select=eq(pict_type\\,PICT_TYPE_I),scale=min(640\\,iw):-2,tile=2x2', '-f', 'image2pipe', '-vframes', '1', '-'];
 
 	if (debug) console.log('Spawning thumb process');
 
@@ -550,7 +569,6 @@ function handleAudioRequest(relPath, request, response) {
 	var headerSent = false;
 
 	// TODO: Child management
-	//var encoderChild = childProcess.spawn(transcoderPath, ['-i', filePath, '-b:a', 64 + 'k', '-ac', '2', '-acodec', 'libaacplus', '-threads', '0', '-f', 'adts', '-']);
 	var encoderChild = childProcess.spawn(transcoderPath, [
 		'-i', filePath, '-threads', '0',
 		'-b:a', 192 + 'k', '-ac', '2', '-acodec', 'libmp3lame',
@@ -735,6 +753,13 @@ function initExpress() {
 
 	app.use('/raw/', serveStatic(rootPath));
 
+	app.get(/^\/del/, function(request, response){
+		var relPath = path.relative('/del/', decodeURIComponent(request.path));
+		console.log(relPath);
+		response.writeHead(200);
+		response.end();
+	});
+
 	app.get(/^\/audio\//, function(request, response) {
 		var relPath = path.relative('/audio/', decodeURIComponent(request.path));
 		handleAudioRequest(relPath, request, response);
@@ -750,10 +775,12 @@ function initExpress() {
 		console.log(request.body);
 
 		var newWidth = request.body.videoWidth;
+		var newQuality = request.body.videoQuality;
 		if (newWidth) {
 			targetWidth = parseInt(newWidth);
-			videoBitrate = targetWidth * targetWidth * 0.05 * 25 / 1000;
-			videoBitrate = parseInt(videoBitrate.toFixed(0));
+		}
+		if (newQuality) {
+			targetQuality = parseInt(newQuality);
 		}
 
 		response.end();
@@ -762,7 +789,8 @@ function initExpress() {
 	app.get(/^\/settings/, function(request, response) {
 		response.setHeader('Content-Type', 'application/json');
 		response.write(JSON.stringify({
-			'videoWidth': targetWidth
+			'videoWidth': targetWidth,
+			'videoQuality': targetQuality
 		}));
 		response.end();
 	});
