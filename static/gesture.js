@@ -33,7 +33,6 @@ Object.assign(MediaElementPlayer.prototype, {
 		
 		player.hammer = new Hammer(player.container, {threshold:50, direction:Hammer.DIRECTION_VERTICAL});
 		player.hammer.on('panstart panend panleft panright', function(ev) {
-			console.log(ev);
 			switch(ev.type){
 				case "panstart":
 					gesture.seekTimeStart = player.getCurrentTime();
