@@ -60,12 +60,6 @@ $(function() {
 			$video.mediaelementplayer({
 				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'speed', 'fullscreen'],
 				clickToPlayPause: false,
-				hls: {
-					path : 'hls.js/dist/hls.js',
-					startPosition : 0,
-					debug: false,
-					autoStartLoad: true
-				},
 				success: function (mediaElement2, domObject) {
 					mediaElement = mediaElement2;
 					mediaElement.play();

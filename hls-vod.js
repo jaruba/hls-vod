@@ -325,6 +325,88 @@ function convertSecToTime(sec){
 	return result;
 }
 
+function handleMp4Request(file, request, response){
+	if (debug)
+		console.log('Segment request: ' + file)
+
+	if (!file) {
+		response.writeHead(400);
+		response.end();
+	}
+    file = path.join('/', file);
+	file = path.join(rootPath, file);
+    start = request.query.start?parseInt(request.query.start):0;
+	speed = request.query.speed?parseInt(request.query.speed):0;
+	var atempo = [];
+	var setpts = 1.0;
+	switch(speed) {
+		case 4:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 3:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 2:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 1:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+			break;
+		default:
+			break;
+	}
+	var atempo_opt = atempo.length ? atempo.join(',') : 'anull';
+	var setpts_opt = setpts.toFixed(4);
+	var startTime = convertSecToTime(start);
+	var args = [
+		'-ss', startTime,
+		'-i', file, '-sn', '-async', '0',
+		'-af', atempo_opt,
+		'-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30',
+		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-crf', targetQuality, '-x264opts', 'level=3.0',
+		'-threads', '0', '-flags', '-global_header', '-map', '0',
+		'-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov', '-v', '0', 'pipe:1'
+	];
+	var encoderChild = childProcess.spawn(transcoderPath, args, {cwd: outputPath, env: process.env});
+
+	console.log('Spawned encoder instance');
+	
+	if (debug)
+		console.log(transcoderPath + ' ' + args.join(' '));
+
+	response.writeHead(200);
+	
+	if (debug) {
+		encoderChild.stderr.on('data', function(data) {
+			console.log(data.toString());
+		});
+	}
+	
+	encoderChild.stdout.on('data', function(data) {
+		response.write(data);
+	});
+	
+	encoderChild.on('exit', function(code) {
+		if (code == 0) {
+			console.log('Encoder completed');
+		}
+		else {
+			console.log('Encoder exited with code ' + code);
+		}
+		response.end();
+	});
+	
+	request.on('close', function() {
+		encoderChild.kill();
+		setTimeout(function() {
+			encoderChild.kill('SIGKILL');
+		}, 5000);
+	});
+
+}
+
 function handleSegmentRequest(index, start, duration, speed, file, request, response){
 	file = new Buffer(file, 'base64').toString('utf8');
 	if (debug)
@@ -371,10 +453,11 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 	var durationTime = convertSecToTime(duration);
 	var args = [
 		'-ss', startTime, '-t', durationTime,
-		'-i', file, '-sn',
-		'-async', '0', '-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2', '-af', 'asetpts=' + setpts_opt + '*PTS',
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'ultrafast',
-		'-crf', targetQuality, '-x264opts', 'level=3.0',
+		'-i', file, '-sn', '-async', '0',
+		'-af', atempo_opt,
+		'-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30',
+		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-crf', targetQuality, '-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
 	];
@@ -387,7 +470,7 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 
 	response.writeHead(200);
 	
-	if (1) {
+	if (debug) {
 		encoderChild.stderr.on('data', function(data) {
 			console.log(data.toString());
 		});
@@ -504,7 +587,8 @@ function browseDir(browsePath, response) {
 						var extName = path.extname(file).toLowerCase();
 						if (videoExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'video';
-							fileObj.path = '/hls/file-' + encodeURIComponent(relPath) + '.m3u8';
+							//fileObj.path = '/hls/file-' + encodeURIComponent(relPath) + '.m3u8';
+							fileObj.path = '/mp4/file-' + encodeURIComponent(relPath) + '.mp4?start=0&speed=0';
 						}
 						else if (audioExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'audio';
@@ -730,6 +814,11 @@ function initExpress() {
 	app.get(/^\/hls\/file-(.+).m3u8/, function(request, response) {
 		var filePath = decodeURIComponent(request.params[0]);
 		handlePlaylistRequest(filePath, response);
+	});
+    
+	app.get(/^\/mp4\/file-(.+).mp4/, function(request, response) {
+		var filePath = decodeURIComponent(request.params[0]);
+		handleMp4Request(filePath, request, response);
 	});
 
 	app.get(/^\/hls\/stream-([0-9]+)_([0-9\.]+)_([0-9\.]+)_(\-*[0-9]+)_(.+).ts/, function(request, response) {
