@@ -224,13 +224,6 @@ $(function() {
 		$('#settings-container select[name=videoQuality]').val(data.videoQuality);
 	});
 	
-	var socket = io.connect();
-
-	socket.on('updateActiveTranscodings', function(data) {
-		activeTranscodings = data;
-		updateActiveTranscodings();
-	});
-	
 	var url = $(location).attr('href');
 	var param = url.split('?path=');
 	if (param.length == 2) {
