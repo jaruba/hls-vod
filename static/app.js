@@ -58,7 +58,7 @@ $(function() {
 			var $video = $('#video');
 			$video[0].src = path;
 			$video.mediaelementplayer({
-				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'speed', 'fullscreen'],
+				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'fullscreen'],
 				clickToPlayPause: false,
 				hls: {
 					path : 'hls.js/dist/hls.js',
@@ -228,13 +228,6 @@ $(function() {
 	$.get('/settings', function(data) {
 		$('#settings-container select[name=videoWidth]').val(data.videoWidth);
 		$('#settings-container select[name=videoQuality]').val(data.videoQuality);
-	});
-	
-	var socket = io.connect();
-
-	socket.on('updateActiveTranscodings', function(data) {
-		activeTranscodings = data;
-		updateActiveTranscodings();
 	});
 	
 	var url = $(location).attr('href');

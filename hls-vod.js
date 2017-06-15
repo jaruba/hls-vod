@@ -71,10 +71,6 @@ function withModifiedPlaylist(readStream, eachLine, done) {
 	});
 }
 
-function updateActiveTranscodings() {
-	io.emit('updateActiveTranscodings', 1);
-}
-
 function spawnProbeProcess(file, playlistPath) {
 	var playlistFileName = file + '_hls.m3u8'; //'stream.m3u8';
 	var hash = new Buffer(file).toString('base64');
@@ -90,7 +86,6 @@ function spawnProbeProcess(file, playlistPath) {
 	if (debug) console.log(probePath + ' ' + args.join(' '));
 
 	probeProcesses[file] = probeChild;
-// 	updateActiveTranscodings();
 	currentFile = file;
 
 	var rl = readLine.createInterface(probeChild.stdout, probeChild.stdin);
@@ -120,7 +115,7 @@ function spawnProbeProcess(file, playlistPath) {
 				var duration = pkt_time - lastEnd;
 				var durationStr = duration.toFixed(2);
 				writeStream.write('#EXTINF:' + durationStr + ',\n');
-				var segment = encodeURIComponent('stream-' + index + '_' + lastEnd + '_' + durationStr + '_0_' + hash + '.ts');
+				var segment = encodeURIComponent('stream-' + index + '_' + lastEnd + '_' + durationStr + '_' + hash + '.ts');
 				writeStream.write(segment + '\n');
 //     			console.log(segment);
 				lastEnd = pkt_time;
@@ -144,7 +139,6 @@ function spawnProbeProcess(file, playlistPath) {
 		}
 
 		delete probeProcesses[file];
-// 		updateActiveTranscodings();
 	});
 
 	// Kill any "zombie" processes
@@ -325,7 +319,7 @@ function convertSecToTime(sec){
 	return result;
 }
 
-function handleSegmentRequest(index, start, duration, speed, file, request, response){
+function handleSegmentRequest(index, start, duration, file, request, response){
 	file = new Buffer(file, 'base64').toString('utf8');
 	if (debug)
 		console.log('Segment request: ' + file)
@@ -335,46 +329,14 @@ function handleSegmentRequest(index, start, duration, speed, file, request, resp
 		response.end();
 	}
 
-	speed = parseInt(speed);
-	var atempo = [];
-	var setpts = 1.0;
-	switch(speed) {
-		case 4:
-			atempo.push('atempo=2');
-			setpts = setpts / 2;
-		case 3:
-			atempo.push('atempo=2');
-			setpts = setpts / 2;
-		case 2:
-			atempo.push('atempo=2');
-			setpts = setpts / 2;
-		case 1:
-			atempo.push('atempo=2');
-			setpts = setpts / 2;
-			break;
-		case -3:
-			atempo.push('atempo=0.5');
-			setpts = setpts * 2;
-		case -2:
-			atempo.push('atempo=0.5');
-			setpts = setpts * 2;
-		case -1:
-			atempo.push('atempo=0.5');
-			setpts = setpts * 2;
-			break;
-		default:
-			break;
-	}
-	var atempo_opt = atempo.length ? atempo.join(',') : 'anull';
-	var setpts_opt = setpts.toFixed(4);
 	var startTime = convertSecToTime(start);
 	var durationTime = convertSecToTime(duration);
 	var args = [
 		'-ss', startTime, '-t', durationTime,
 		'-i', file, '-sn',
-		'-async', '0', '-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2', '-af', 'asetpts=' + setpts_opt + '*PTS',
-		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30', '-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'ultrafast',
-		'-crf', targetQuality, '-x264opts', 'level=3.0',
+		'-async', '0', '-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2', '-r',  '30',
+		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v' ,'ultrafast', '-crf', targetQuality, '-x264opts', 'level=3.0',
 		'-threads', '0', '-flags', '-global_header', '-map', '0',
 		'-f', 'mpegts', '-copyts', '-muxdelay', '0', '-v', '0', 'pipe:1'
 	];
@@ -732,9 +694,9 @@ function initExpress() {
 		handlePlaylistRequest(filePath, response);
 	});
 
-	app.get(/^\/hls\/stream-([0-9]+)_([0-9\.]+)_([0-9\.]+)_(\-*[0-9]+)_(.+).ts/, function(request, response) {
-		var filePath = decodeURIComponent(request.params[4]);
-		handleSegmentRequest(request.params[0], request.params[1], request.params[2], request.params[3], filePath, request, response);
+	app.get(/^\/hls\/stream-([0-9]+)_([0-9\.]+)_([0-9\.]+)_(.+).ts/, function(request, response) {
+		var filePath = decodeURIComponent(request.params[3]);
+		handleSegmentRequest(request.params[0], request.params[1], request.params[2], filePath, request, response);
 	});
 
 	app.get(/^\/thumbnail\//, function(request, response) {
