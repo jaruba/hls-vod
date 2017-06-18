@@ -24,6 +24,7 @@ var searchPaths = [];
 var rootPath = null;
 var outputPath = './cache';
 var transcoderPath = 'ffmpeg';
+var probePath = 'ffprobe';
 var debug = false;
 var cert = null;
 var key = null;
@@ -43,18 +44,7 @@ function convertSecToTime(sec){
 	return result;
 }
 
-function handleMp4Request(file, request, response){
-	if (debug)
-		console.log('Segment request: ' + file)
-
-	if (!file) {
-		response.writeHead(400);
-		response.end();
-	}
-    file = path.join('/', file);
-	file = path.join(rootPath, file);
-    start = request.query.start?parseInt(request.query.start):0;
-	speed = request.query.speed?parseInt(request.query.speed):0;
+function startTranscoding(file, offset, speed, info, socket){
 	var atempo = [];
 	var setpts = 1.0;
 	switch(speed) {
@@ -76,16 +66,16 @@ function handleMp4Request(file, request, response){
 	}
 	var atempo_opt = atempo.length ? atempo.join(',') : 'anull';
 	var setpts_opt = setpts.toFixed(4);
-	var startTime = convertSecToTime(start);
+	var startTime = convertSecToTime(offset);
 	var args = [
 		'-ss', startTime,
 		'-i', file, '-sn', '-async', '0',
 		'-af', atempo_opt,
 		'-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
 		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  '30',
-		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-crf', targetQuality, '-x264opts', 'level=3.0',
-		'-threads', '0', '-flags', '-global_header', '-map', '0',
-		'-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov', '-v', '0', 'pipe:1'
+		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-tune', 'zerolatency', '-crf', targetQuality, '-x264opts', 'level=3.0', '-pix_fmt', 'yuv420p',
+		'-threads', '0', '-flags', '+global_header', '-map', '0',
+		'-f', 'mp4', '-reset_timestamps', '1', '-movflags', 'empty_moov+frag_keyframe+default_base_moof', '-v', 'error', 'pipe:1'
 	];
 	var encoderChild = childProcess.spawn(transcoderPath, args, {env: process.env});
 
@@ -94,7 +84,6 @@ function handleMp4Request(file, request, response){
 	if (debug)
 		console.log(transcoderPath + ' ' + args.join(' '));
 
-	response.writeHead(200);
 	
 	if (debug) {
 		encoderChild.stderr.on('data', function(data) {
@@ -103,25 +92,79 @@ function handleMp4Request(file, request, response){
 	}
 	
 	encoderChild.stdout.on('data', function(data) {
-		response.write(data);
+		if (debug && 0) {
+			console.log(data.length);
+		}
+		socket.emit('data', data);
 	});
 	
 	encoderChild.on('exit', function(code) {
 		if (code == 0) {
+			socket.emit('eos');
 			console.log('Encoder completed');
 		}
 		else {
 			console.log('Encoder exited with code ' + code);
 		}
-		response.end();
 	});
 	
-	request.on('close', function() {
+	socket.on('disconnect', function(){
 		encoderChild.kill();
 		setTimeout(function() {
 			encoderChild.kill('SIGKILL');
 		}, 5000);
 	});
+
+	socket.on('error', function(){
+		encoderChild.kill();
+		setTimeout(function() {
+			encoderChild.kill('SIGKILL');
+		}, 5000);
+	});
+	
+	socket.on('pause', function(){
+		console.log('pause');
+		encoderChild.kill('SIGSTOP');
+	});
+	
+	socket.on('continue', function(){
+		console.log('continue');
+		encoderChild.kill('SIGCONT');
+	});
+
+}
+
+function handleMp4Request(file, offset, speed, socket){
+	if (debug)
+		console.log('MP4 request: ' + file)
+
+	if (file) {
+		file = path.join('/', file);
+		file = path.join(rootPath, file);
+		var args = [
+			'-v', '0', '-print_format', 'json', '-show_format', '-show_streams', file
+		];
+		var probeChild = childProcess.spawn(probePath, args, {env: process.env});
+		var json = '';
+		probeChild.stdout.on('data', function(data) {
+			json +=data;
+		});
+		probeChild.on('exit', function(code) {
+			
+			if (code == 0) {
+				try {
+					var info = JSON.parse(json);
+					socket.emit('duration', info['format']['duration']);
+					startTranscoding(file, offset, speed, info, socket);
+				} catch (err) {
+					console.log(json);
+				}
+				
+			} else {
+				console.log('Probe failed with code ' + code);
+			}
+		});
+	}
 
 }
 
@@ -213,8 +256,7 @@ function browseDir(browsePath, response) {
 						var extName = path.extname(file).toLowerCase();
 						if (videoExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'video';
-							//fileObj.path = '/hls/file-' + encodeURIComponent(relPath) + '.m3u8';
-							fileObj.path = '/mp4/file-' + encodeURIComponent(relPath) + '.mp4?start=0&speed=0';
+							fileObj.path = encodeURIComponent(relPath) + '.mp4';
 						}
 						else if (audioExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'audio';
@@ -421,11 +463,6 @@ function initExpress() {
 
 	app.use('/', serveStatic(__dirname + '/static'));
 
-	app.get(/^\/mp4\/file-(.+).mp4/, function(request, response) {
-		var filePath = decodeURIComponent(request.params[0]);
-		handleMp4Request(filePath, request, response);
-	});
-
 	app.get(/^\/thumbnail\//, function(request, response) {
 		var file = path.relative('/thumbnail/', decodeURIComponent(request.path));
 		handleThumbnailRequest(file, response);
@@ -484,6 +521,15 @@ function initExpress() {
 		response.end();
 	});
 	
+	io.on('connection', function (socket) {
+		socket.on('start', function (data) {
+			console.log(socket.id);
+			var match = /^(.+).mp4/.exec(data.file);
+			if (match) {
+				handleMp4Request(decodeURIComponent(match[1]), data.offset, data.speed, socket);
+			}
+		});
+	});
 
 	server.listen(listenPort);
 }

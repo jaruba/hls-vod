@@ -59,6 +59,7 @@ $(function() {
 			$video[0].src = path;
 			$video.mediaelementplayer({
 				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'speed', 'fullscreen'],
+				renderers: ['vod'],
 				clickToPlayPause: false,
 				success: function (mediaElement2, domObject) {
 					mediaElement = mediaElement2;
@@ -223,6 +224,7 @@ $(function() {
 		$('#settings-container select[name=videoWidth]').val(data.videoWidth);
 		$('#settings-container select[name=videoQuality]').val(data.videoQuality);
 	});
+	
 	
 	var url = $(location).attr('href');
 	var param = url.split('?path=');
