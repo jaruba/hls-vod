@@ -1,0 +1,8 @@
+[submodule "static/mediaelement-plugins"]
+	path = static/mediaelement-plugins
+	url = https://github.com/gt945/mediaelement-plugins.git
+	branch = live-vod
+[submodule "static/mediaelement"]
+	path = static/mediaelement
+	url = https://github.com/gt945/mediaelement.git
+	branch = live-vod
