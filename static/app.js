@@ -102,13 +102,6 @@ $(function() {
 
 		var $fileList = $('#file-list');
 		
-		if (window.history && window.history.pushState) {
-			window.history.pushState('forward', null, './#view');
-			$(window).on('popstate', function() {
-				$("#back").click();
-			});
-		}
-	
 		$.ajax('/browse' + path, {
 			success: function(data) {
 				loading = false;
