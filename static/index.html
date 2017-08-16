@@ -52,10 +52,23 @@
 			<img alt="" id="preview-image" />
 			<div id="player-loading"><i class="fa fa-spinner fa-pulse"></i></div>
 		</div>
+		
+		<div class="list-group-item" style="padding:0px; display: flex;">
+			<div id="dir_action" class="dropdown">
+				<span type="button" data-toggle="dropdown" class="file-dropdown dropdown-toggle">
+					<span class="glyphicon glyphicon-menu-hamburger"></span>
+				</span>
+				<ul class="dropdown-menu">
+					<li><a id="btn_rename" href="#">Rename</a></li>
+					<li role="separator" class="divider"></li>
+					<li><a id="btn_delete" href="#">Delete</a></li>
+				</ul>
+			</div>
+			<div id="dir-header" class="list-group-item-heading"></div>
+			
+		</div>
 
-		<div id="dir-header"></div>
-
-		<ul id="file-list"></ul>
+		<div id="file-list" class="list-group"></div>
 
 		<div style="margin: 2em 0"><span id="settings-btn">Settings</span></div>
 		<div id="settings-container">
@@ -88,5 +101,20 @@
 			</div>
 		</div>
 	</div>
+	<div id="mediainfo" class="modal fade" style="display: none;">
+		<div class="modal-dialog" role="document">
+			<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">Media Information</h5>
+			</div>
+			<div class="modal-body">
+				<p></p>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+			</div>
+		</div>
+	</div>
+</div>
 </body>
 </html>

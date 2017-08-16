@@ -104,25 +104,27 @@ function startTranscoding(file, offset, speed, info, socket){
 	if (debug)
 		console.log(transcoderPath + ' ' + args.join(' '));
 
-	stop = function(){
+	var stop = function(){
 		if (!pause) {
 			pause = true;
 			if (debug)
-				console.log('pause');
+				console.log('[' + socket.id + '] Pause');
 			encoderChild.kill('SIGSTOP');
 		}
 	}
 
-	start = function(){
+	var start = function(){
 		if (pause) {
 			pause = false;
 			if (debug)
-				console.log('continue');
+				console.log('[' + socket.id + '] Continue');
 			encoderChild.kill('SIGCONT');
 		}
 	}
 
-	quit = function(){
+	var quit = function(){
+		if (debug)
+			console.log('[' + socket.id + '] ' + 'Quit');
 		start();
 		encoderChild.kill();
 		setTimeout(function() {
@@ -130,7 +132,7 @@ function startTranscoding(file, offset, speed, info, socket){
 		}, 5000);
 	}
 	
-	check_ack = function(){
+	var check_ack = function(){
 		var wait = seq - ack > 100 ? true : false;
 		if (wait && !pause) {
 			stop();
@@ -156,6 +158,8 @@ function startTranscoding(file, offset, speed, info, socket){
 			socket.emit('verbose', verbose);
 			if (debug)
 				console.log('[' + socket.id + '] seq: ' + seq + ' ack: ' + ack);
+		} else {
+			console.log(data.toString());
 		}
 	});
 	
@@ -187,7 +191,7 @@ function startTranscoding(file, offset, speed, info, socket){
 	});
 
 	socket.on('error', function(){
-		console.log('[' + socket.id + '] Error')
+		console.log('[' + socket.id + '] Error');
 		quit();
 	});
 
@@ -201,19 +205,23 @@ function startTranscoding(file, offset, speed, info, socket){
 
 }
 
+function probeMediainfo(file) {
+	var args = [
+		'-v', '0', '-print_format', 'json', '-show_format', '-show_streams', file
+	];
+	var probeChild = childProcess.spawnSync(probePath, args);
+	return probeChild.stdout.toString();
+}
+
 function handleMp4Request(file, offset, speed, socket){
 	if (debug)
-		console.log('MP4 request: ' + file)
+		console.log('MP4 request: ' + file);
 
 	if (file) {
 		file = path.join('/', file);
 		file = path.join(rootPath, file);
 
-		var args = [
-			'-v', '0', '-print_format', 'json', '-show_format', '-show_streams', file
-		];
-		var probeChild = childProcess.spawnSync(probePath, args);
-		var json = probeChild.stdout.toString();
+		var json = probeMediainfo(file);
 		try {
 			var info = JSON.parse(json);
 			socket.emit('mediainfo', info);
@@ -248,6 +256,131 @@ function handleMp4Request(file, offset, speed, socket){
 
 	}
 
+}
+
+function handleMediainfoRequest(file, response) {
+	if (file) {
+		file = path.join('/', file);
+		file = path.join(rootPath, file);
+		var json = probeMediainfo(file);
+		var text = "";
+		try {
+			var info = JSON.parse(json);
+			response.writeHead(200, {'Content-Type': 'text/plain'});
+			var format = info['format'];
+			var size = parseInt( parseInt(format['size']) / 1024 / 1024 );
+			var duration = parseInt( parseInt(format['duration']) / 60 );
+			text += 'Size: ' + size + ' MB<br>';
+			text += 'Duration: ' + duration + ' Min<br>';
+			for (i in info['streams']){
+				var stream = info['streams'][i];
+				text += '#' + stream['index'] + ':' + stream['codec_name'];
+				if (stream['codec_type'] == 'video') {
+					text += '(' + stream['coded_width'] + 'x' + stream['coded_height'] + ')';
+				}
+				
+				text += '<br>';
+			}
+			response.write(text);
+		} catch (err) {
+			response.writeHead(500);
+		}
+	} else {
+		response.writeHead(404);
+	}
+	response.end();
+}
+
+function handleDeleteRequest(file, response) {
+	if (file) {
+		file = path.join('/', file);
+		file = path.join(rootPath, file);
+		console.log(file);
+		fs.lstat(file, function(err, stats) {
+			if (err) {
+				response.writeHead(404);
+			} else if (stats.isFile()) {
+				response.writeHead(200);
+				fs.unlinkSync(file);
+			} else {
+				response.writeHead(403);
+			}
+			response.end();
+		});
+	} else {
+		response.writeHead(404);
+		response.end();
+	}
+	
+}
+
+function handleDeleteDirRequest(file, response) {
+	if (file) {
+		file = path.join('/', file);
+		file = path.join(rootPath, file);
+		if (fs.existsSync(file)) {
+			var candel = true;
+			fs.readdirSync(file).forEach(function(f,index){
+				if(fs.lstatSync(path.join(file, f)).isDirectory()) {
+					candel = false;
+				}
+			});
+			
+			if (candel) {
+				
+				fs.readdirSync(file).forEach(function(f,index){
+					fs.unlinkSync(path.join(file, f));
+				});
+				fs.rmdirSync(file);
+				response.writeHead(200);
+				response.write('ok');
+			} else {
+				response.writeHead(200);
+				response.write('ng');
+			}
+		} else {
+			response.writeHead(404);
+		}
+		response.end();
+// 		fs.lstat(file, function(err, stats) {
+// 			if (err) {
+// 				response.writeHead(404);
+// 				response.end();
+// 			} else if (stats.isFile()) {
+// 				response.writeHead(403);
+// 				response.end();
+// 			} else {
+// 				fs.readdir(file, (err, files) => {
+// 					if (err) {
+// 						response.writeHead(500);
+// 					} else {
+// 						var candel = true;
+// 						files.forEach(f => {
+// 							var st = fs.lstatSync(path.join(file, f));
+// 							if (st.isDirectory()) {
+// 								candel = false;
+// 							}
+// 						});
+// 						if (candel) {
+// 							response.writeHead(200);
+// 							
+// 							
+// 							
+// 							response.write('ok');
+// 						} else {
+// 							response.writeHead(200);
+// 							response.write('ng');
+// 						}
+// 					}
+// 					response.end();
+// 				});
+// 			}
+// 		});
+	} else {
+		response.writeHead(404);
+		response.end();
+	}
+	
 }
 
 function listFiles(response) {
@@ -332,8 +465,7 @@ function browseDir(browsePath, response) {
 					if (err) {
 						fileObj.error = true;
 						fileObj.errorMsg = err;
-					}
-					else if (stats.isFile()) {
+					} else if (stats.isFile()) {
 						var relPath = path.join(browsePath, file);
 						var extName = path.extname(file).toLowerCase();
 						if (videoExtensions.indexOf(extName) != -1) {
@@ -351,8 +483,7 @@ function browseDir(browsePath, response) {
 						}
 
 						fileObj.relPath = path.join('/', relPath);
-					}
-					else if (stats.isDirectory()) {
+					} else if (stats.isDirectory()) {
 						fileObj.type = 'directory';
 						fileObj.path = path.join(browsePath, file);
 					}
@@ -450,6 +581,8 @@ function init() {
 			+ ' [--search-path PATH1 [--search-path PATH2 [...]]]'
 			+ ' [--port PORT]'
 			+ ' [--transcoder-path PATH]'
+			+ ' [--cert PATH]'
+			+ ' [--key PATH]'
 			+ ' [--debug]'
 		);
 		process.exit();
@@ -554,20 +687,28 @@ function initExpress() {
 		listFiles(response);
 	});
 
-	app.get(/^\/browse/, function(request, response) {
+	app.get(/^\/browse\//, function(request, response) {
 		var browsePath = path.relative('/browse', decodeURIComponent(request.path));
 		browseDir(browsePath, response);
 	});
 
 	app.use('/raw/', serveStatic(rootPath));
 
-	app.get(/^\/del/, function(request, response){
+	app.get(/^\/del\//, function(request, response){
 		var relPath = path.relative('/del/', decodeURIComponent(request.path));
-		console.log(relPath);
-		response.writeHead(200);
-		response.end();
+		handleDeleteRequest(relPath, response);
+	});
+	
+	app.get(/^\/deldir\//, function(request, response){
+		var relPath = path.relative('/deldir/', decodeURIComponent(request.path));
+		handleDeleteDirRequest(relPath, response);
 	});
 
+	app.get(/^\/info\//, function(request, response){
+		var relPath = path.relative('/info/', decodeURIComponent(request.path));
+		handleMediainfoRequest(relPath, response);
+	});
+	
 	app.get(/^\/audio\//, function(request, response) {
 		var relPath = path.relative('/audio/', decodeURIComponent(request.path));
 		handleAudioRequest(relPath, request, response);

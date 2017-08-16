@@ -108,22 +108,37 @@ $(function() {
 
 				$('#dir-header').text(data.cwd);
 
+				$('#btn_delete').unbind('click').click(function(){
+					if (window.confirm("Delete\n" + data.cwd +"\nAre you sure?")) {
+						$.get('/deldir' + data.cwd, function(ret){
+							if (ret=='ok'){
+								browseTo(path + '/..');
+							}
+						});
+					}
+					return false;
+				});
+					
 				$fileList.empty();
 
-				var back = $('<li id="back"/>');
-				back.html('..');
+				var back = $('<div class="list-group-item file-item"/>');
+				back.append($('<div class="list-group-item-heading file-title">..</>'));
 				back.click(function() {
 					browseTo(data.cwd != '/' ? path + '/..' : path);
 				});
 				$fileList.append(back);
 
 				$.each(data.files, function(index, file) {
-					var elem = $('<li/>');
-					elem.text(file.name);
-
+					var elem = $('<div class="list-group-item file-item"/>');
+					var title = $('<div class="list-group-item-heading file-title">');
+					title.text(file.name);
+					elem.append(title);
+					var dropDown = $('<div class="dropdown file-action"><span type="button" data-toggle="dropdown" class="file-dropdown dropdown-toggle"><span class="glyphicon glyphicon-menu-hamburger"></span></span></div>');
+					var dropMenus = [];//$('<ul class="dropdown-menu"></ul>');
+					
 					switch(file.type) {
 					case 'video':
-						elem.click(function() {
+						title.click(function() {
 							if (activeTranscodings.length == 0 || confirm('Play video? (Will delete any previous encoding)')) {
 								videoPlay(file.path);
 							}
@@ -131,54 +146,67 @@ $(function() {
 						break;
 
 					case 'audio':
-						elem.click(function() {
+						title.click(function() {
 							audioPlay(file.path, file.name);
 						});
 						break;
 					case 'image':
-						elem.click(function() {
+						title.click(function() {
 							imageShow(file.path, file.name);
 						});
 						break;
 					case 'directory':
-						elem.click(function() {
+						title.click(function() {
 							browseTo(file.path);
 						});
 						break;
 					
 						default:
 					}
-
+					
 					if (file.error) {
 						elem.attr('title', file.errorMsg);
 					}
 
 					if (file.type == 'video' || file.type == 'audio') {
-						var rawLink = $('<a style="color: inherit; margin-left: 1em; padding: 1em" />').attr('href', '/raw' + file.relPath).text('RAW');
-						rawLink.click(function(event) {
-							event.stopPropagation();
+						var infoLink = $('<a  />').attr('href', '/info' + file.relPath).text('Information');
+						infoLink.click(function(event) {
+							$.get(this.href,function(rsp){
+								$("#mediainfo .modal-body p").html(rsp);
+								$("#mediainfo").modal('show');
+							});
+							return false;
 						});
-						elem.append(rawLink);
-						var delLink = $('<a style="color: inherit; margin-left: 1em; padding: 1em" />').attr('href', '/del' + file.relPath).text('DEL');
+						dropMenus.push($('<li/>').append(infoLink));
+					}
+
+					if (file.type != 'directory' ) {
+						var delLink = $('<a  />').attr('href', '/del' + file.relPath).text('Delete');
 						delLink.click(function(event) {
-							if (window.confirm("Are you sure?")) {
-								$.get(this.href);
+							if (window.confirm("Delete\n" + file.relPath +"\nAre you sure?")) {
+								$.get(this.href, function(){
+									browseTo(path);
+								});
 							}
 							return false;
 						});
-						elem.append(delLink);
+						if (dropMenus.length) {
+							dropMenus.push($('<li role="separator" class="divider"></li>'));
+						}
+						dropMenus.push($('<li/>').append(delLink));
 					}
 
-					if (file.type == 'video') {
-						var thumbLink = $('<span style="padding: 1em" />').text('Preview');
-						thumbLink.click(function(event) {
-							event.stopPropagation();
-							showPreviewImage(file.relPath);
-						});
-						elem.append(thumbLink);
+					if (dropMenus.length) {
+						var dropMenu = $('<ul class="dropdown-menu"></ul>');
+						for(i in dropMenus) {
+							dropMenu.append(dropMenus[i]);
+						}
+						dropDown.append(dropMenu);
+						elem.prepend(dropDown);
 					}
-
+					
 					$('#file-list').append(elem);
+
 				});
 			}
 		});

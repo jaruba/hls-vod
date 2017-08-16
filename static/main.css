@@ -8,37 +8,6 @@ body {
 a, a:visited, a:active {
 	color: inherit;
 }
-#file-list {
-	list-style: none;
-	padding-left: 0;
-	margin-top: 0;
-}
-#file-list li {
-	cursor: pointer;
-	background: linear-gradient(to bottom, #fff 0%, #eee 48%, #ddd 52%, #ccc 100%);
-	border: 1px solid #ccc;
-	text-shadow: 1px 1px #ccc;
-	color: #000;
-	font-size: 1.2em;
-	padding: .4em .5em;
-	white-space: nowrap;
-	overflow-x: auto;
-	overflow-y: hidden;
-}
-#file-list li img.thumbnail {
-	height: 50px;
-	vertical-align: middle;
-	padding-right: .7em;
-}
-#dir-header {
-	background: linear-gradient(to bottom, #fff 0%, #eee 48%, #ddd 52%, #ccc 100%);
-	border: 1px solid #ccc;
-	text-shadow: 1px 1px #ccc;
-	color: #c00;
-	font-size: 1.2em;
-	padding: .2em .5em;
-	overflow: hidden;
-}
 
 #transcoders {
 	color: white;
@@ -110,4 +79,46 @@ audio {
 }
 #settings-container {
 	display: none;
+}
+#dir_action {
+	position: absolute;
+	height: 100%;
+}
+#dir-header {
+	padding: 10px 15px 10px 35px;
+	overflow-wrap: break-word;
+	width: 100%;
+}
+
+.file-item {
+	padding: 0px 0px;
+	display: flex;
+}
+
+.file-title {
+	padding: 5px 0 5px 35px;
+	width: 100%;
+	overflow-wrap: break-word;
+}
+.file-action {
+	float: left;
+	position: absolute;
+	height: 100%;
+}
+.file-dropdown {
+	display: inline-block;
+	padding: 0px 12px;
+	cursor: pointer;
+	height: 100%;
+	background-color: silver;
+	padding: 10px 8px;
+}
+
+.modal-header, .modal-body, .modal-footer{
+	padding: 5px;
+}
+
+.glyphicon {
+	top: 50%;
+	transform: translateY(-50%);
 }
