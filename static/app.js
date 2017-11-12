@@ -8,7 +8,6 @@ $(function() {
 	// State
 	var mediaElement;
 	var loading = false;
-	var activeTranscodings = [];
 
 	function audioStop() {
 		$audioPlayer.prop('controls', false);
@@ -65,7 +64,7 @@ $(function() {
 					mediaElement = mediaElement2;
 					mediaElement.play();
 				},
-				error: function (mediaeElement, err) { 
+				error: function (mediaeElement, err) {
 					console.log('Error loading media element');
 				}
 			});
@@ -88,21 +87,13 @@ $(function() {
 		audioStop();
 	}
 	
-	function updateActiveTranscodings() {
-		$('#transcoders').text('Active transcoders: ' + activeTranscodings.length).fadeIn(200);
-		setTimeout(function() {
-			$('#transcoders').fadeOut(200);
-		}, 5000);
-	}
-	
-
 	function browseTo(path) {
 		if (loading) return;
 		loading = true;
 
 		var $fileList = $('#file-list');
 		
-		$.ajax('/browse' + path, {
+		$.ajax('/browse/' + path, {
 			success: function(data) {
 				loading = false;
 
@@ -112,7 +103,7 @@ $(function() {
 					if (window.confirm("Delete\n" + data.cwd +"\nAre you sure?")) {
 						$.get('/deldir' + data.cwd, function(ret){
 							if (ret=='ok'){
-								browseTo(path + '/..');
+								browseTo(path + encodeURIComponent('/..'));
 							}
 						});
 					}
@@ -121,10 +112,26 @@ $(function() {
 					
 				$fileList.empty();
 
+				var prev = $('<div class="list-group-item file-item"/>');
+				prev.append($('<div class="list-group-itemi-heading file-title">Prev</>'));
+				prev.click(function(){
+					if (data.prev) {
+					  browseTo(encodeURIComponent(data.prev));
+					};
+				});
+				$fileList.append(prev);
+        var next = $('<div class="list-group-item file-item"/>');
+				next.append($('<div class="list-group-itemi-heading file-title">Next</>'));
+				next.click(function(){
+					if (data.next) {
+					  browseTo(encodeURIComponent(data.next));
+					};
+				});
+				$fileList.append(next);
 				var back = $('<div class="list-group-item file-item"/>');
 				back.append($('<div class="list-group-item-heading file-title">..</>'));
 				back.click(function() {
-					browseTo(data.cwd != '/' ? path + '/..' : path);
+					browseTo(data.cwd != '/' ? path + encodeURIComponent('/..') : path);
 				});
 				$fileList.append(back);
 
@@ -139,9 +146,8 @@ $(function() {
 					switch(file.type) {
 					case 'video':
 						title.click(function() {
-							if (activeTranscodings.length == 0 || confirm('Play video? (Will delete any previous encoding)')) {
-								videoPlay(file.path);
-							}
+							$("#video_title").text(file.name);
+							videoPlay(file.path);
 						});
 						break;
 
@@ -157,7 +163,7 @@ $(function() {
 						break;
 					case 'directory':
 						title.click(function() {
-							browseTo(file.path);
+							browseTo(encodeURIComponent(file.path));
 						});
 						break;
 					
@@ -205,8 +211,7 @@ $(function() {
 						elem.prepend(dropDown);
 					}
 					
-					$('#file-list').append(elem);
-
+					$fileList.append(elem);
 				});
 			}
 		});
@@ -229,7 +234,7 @@ $(function() {
 		});
 	});
 
-        $('#settings-container select[name=videoQuality]').change(function() {
+  $('#settings-container select[name=videoQuality]').change(function() {
 		$.ajax('/settings', {
 			data: {
 				videoQuality: $(this).val()

@@ -44,7 +44,97 @@ function convertSecToTime(sec){
 	return result;
 }
 
-function startTranscoding(file, offset, speed, info, socket){
+function startHTTPTranscoding(file, info, request, response){
+	console.log('Spawned encoder instance');
+    start = request.query.start?parseInt(request.query.start):0;
+	speed = request.query.speed?parseInt(request.query.speed):0;
+	var atempo = [];
+	var setpts = 1.0;
+	var fps = 30;
+	switch(speed) {
+		case 4:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 3:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 2:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 1:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+			fps *= 2;
+			break;
+		default:
+			break;
+	}
+	switch(targetWidth) {
+	case 240:
+		audioBitrate = 32;
+		fps = 25;
+		break;
+	case 320:
+		audioBitrate = 64;
+		break;
+	default:
+		audioBitrate = 128;
+		break;
+	}
+	var atempo_opt = atempo.length ? atempo.join(',') : 'anull';
+	var setpts_opt = setpts.toFixed(4);
+	var startTime = convertSecToTime(start);
+	var gop = fps;
+	var args = [
+		'-ss', startTime,
+		'-i', file, '-sn', '-async', '0',
+		'-af', atempo_opt,
+		'-acodec', 'aac', '-b:a', audioBitrate + 'k', '-ar', '44100', '-ac', '2',
+		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  fps,
+		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-tune', 'zerolatency', '-crf', targetQuality, '-g', gop,
+		'-x264opts', 'level=3.0', '-pix_fmt', 'yuv420p',
+		'-threads', '0', '-flags', '+global_header', '-map', '0',
+		'-f', 'mp4', '-movflags', 'empty_moov+omit_tfhd_offset+frag_keyframe+default_base_moof', '-v', '0', 'pipe:1'
+// 		'-f', 'mp4', '-reset_timestamps', '1', '-movflags', 'empty_moov+frag_keyframe+default_base_moof', 'pipe:1'
+	];
+	var encoderChild = childProcess.spawn(transcoderPath, args, {env: process.env});
+
+	console.log('Spawned encoder instance');
+	
+	if (debug)
+		console.log(transcoderPath + ' ' + args.join(' '));
+
+	response.writeHead(200);
+	
+	if (debug) {
+		encoderChild.stderr.on('data', function(data) {
+			console.log(data.toString());
+		});
+	}
+	
+	encoderChild.stdout.on('data', function(data) {
+		response.write(data);
+	});
+	
+	encoderChild.on('exit', function(code) {
+		if (code == 0) {
+			console.log('Encoder completed');
+		}
+		else {
+			console.log('Encoder exited with code ' + code);
+		}
+		response.end();
+	});
+	
+	request.on('close', function() {
+		encoderChild.kill();
+		setTimeout(function() {
+			encoderChild.kill('SIGKILL');
+		}, 5000);
+	});
+}
+
+function startWSTranscoding(file, offset, speed, info, socket){
 	var atempo = [];
 	var setpts = 1.0;
 	var fps = 30;
@@ -213,9 +303,32 @@ function probeMediainfo(file) {
 	return probeChild.stdout.toString();
 }
 
-function handleMp4Request(file, offset, speed, socket){
+function handleHTTPMp4Request(file, request, response){
 	if (debug)
-		console.log('MP4 request: ' + file);
+		console.log('HTTP MP4: ' + file)
+
+	if (file) {
+		file = path.join('/', file);
+		file = path.join(rootPath, file);
+		var json = probeMediainfo(file);
+		//try {
+			var info = JSON.parse(json);
+			startHTTPTranscoding(file, info, request, response);
+// 		} catch (err) {
+// 			console.log('Failed');
+// 			response.writeHead(400);
+// 			response.end();
+// 		}
+	} else {
+		response.writeHead(400);
+		response.end();
+	}
+	
+}
+
+function handleWSMp4Request(file, offset, speed, socket){
+	if (debug)
+		console.log('WS MP4 request: ' + file);
 
 	if (file) {
 		file = path.join('/', file);
@@ -225,37 +338,11 @@ function handleMp4Request(file, offset, speed, socket){
 		try {
 			var info = JSON.parse(json);
 			socket.emit('mediainfo', info);
-			startTranscoding(file, offset, speed, info, socket);
+			startWSTranscoding(file, offset, speed, info, socket);
 		} catch (err) {
 			console.log('[' + socket.id + '] ' + json);
 		}
-/*
-		var probeChild = childProcess.spawn(probePath, args, {env: process.env});
-		var json = '';
-
-		probeChild.stderr.on('data', function(data) {
-			console.log(data.toString());
-		});
-
-		probeChild.stdout.on('data', function(data) {
-			if (debug)
-				console.log(data.toString());
-			json += data.toString();
-		});
-
-		probeChild.stdout.on('close', function() {
-			try {
-				var info = JSON.parse(json);
-				socket.emit('mediainfo', info);
-				startTranscoding(file, offset, speed, info, socket);
-			} catch (err) {
-				console.log('[' + socket.id + '] ' + json);
-			}
-		});
-*/
-
 	}
-
 }
 
 function handleMediainfoRequest(file, response) {
@@ -363,9 +450,9 @@ function handleDeleteDirRequest(file, response) {
 // 						});
 // 						if (candel) {
 // 							response.writeHead(200);
-// 							
-// 							
-// 							
+//
+//
+//
 // 							response.write('ok');
 // 						} else {
 // 							response.writeHead(200);
@@ -439,12 +526,30 @@ function browseDir(browsePath, response) {
 			filesDone++;
 
 			if (filesDone == files.length) {
+			  var prev = null;
+			  var next = null;
+			  var parentDir = fs.readdirSync(fsBrowsePath+'/..');
+			  parentDir.sort(function(a, b) {
+					return a.localeCompare(b);
+				});
+				name = path.basename(fsBrowsePath);
+				pos = parentDir.indexOf(name);
+				if (pos > 0) {
+				  prev = path.normalize(browsePath+'/../'+parentDir[pos-1]);
+				}
+				if (pos < parentDir.length && pos >= 0) {
+			    next = path.normalize(browsePath+'/../'+parentDir[pos+1]);
+			  }
+				console.log(fsBrowsePath);
 				fileList.sort(function(a, b) {
 					return a.name.localeCompare(b.name);
 				});
+				
 				response.json({
 					cwd: browsePath,
-					files: fileList
+					files: fileList,
+					prev: prev,
+					next: next
 				});
 				response.end();
 			}
@@ -678,6 +783,10 @@ function initExpress() {
 
 	app.use('/', serveStatic(__dirname + '/static'));
 
+	app.get(/^\/mp4\/(.+).mp4.*/, function(request, response) {
+		var filePath = decodeURIComponent(request.params[0]);
+		handleHTTPMp4Request(filePath, request, response);
+	});
 	app.get(/^\/thumbnail\//, function(request, response) {
 		var file = path.relative('/thumbnail/', decodeURIComponent(request.path));
 		handleThumbnailRequest(file, response);
@@ -750,7 +859,7 @@ function initExpress() {
 				console.log(socket.id);
 			var match = /^(.+).mp4/.exec(data.file);
 			if (match) {
-				handleMp4Request(decodeURIComponent(match[1]), data.offset, data.speed, socket);
+				handleWSMp4Request(decodeURIComponent(match[1]), data.offset, data.speed, socket);
 			}
 		});
 	});
