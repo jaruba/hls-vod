@@ -57,9 +57,10 @@ $(function() {
 			var $video = $('#video');
 			$video[0].src = path;
 			$video.mediaelementplayer({
-				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'volume', 'speed', 'fullscreen'],
+				features: ['playpause', 'gesture', 'volume', 'current', 'progress', 'duration', 'spacer', 'speed', 'fullscreen'],
 				renderers: ['vod'],
 				clickToPlayPause: false,
+				timeAndDurationSeparator: '<span> / </span>',
 				success: function (mediaElement2, domObject) {
 					mediaElement = mediaElement2;
 					mediaElement.play();
