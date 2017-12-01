@@ -8,7 +8,9 @@ $(function() {
 	// State
 	var mediaElement;
 	var loading = false;
-
+	var videoplayer;
+	var videodom;
+	
 	function audioStop() {
 		$audioPlayer.prop('controls', false);
 		$audioPlayer[0].pause();
@@ -41,6 +43,16 @@ $(function() {
 		$audioPlayer[0].play();
 	}
 
+	function loadSubtitle(path) {
+		$(videodom).empty();
+		const track = document.createElement('track');
+		track.kind = 'subtitles';
+		track.label = 'Default';
+		track.src = '/subtitles/' + path;
+		track.srclang = 'en';
+		videodom.appendChild(track);
+		videoplayer.rebuildtracks();
+	}
 	function videoPlay(path) {
 		audioStop();
 		hidePreviewImage();
@@ -50,6 +62,7 @@ $(function() {
 		if (mediaElement) {
 			mediaElement.pause();
 			
+			loadSubtitle(path);
 			mediaElement.setSrc(path);
 			mediaElement.play();
 		}
@@ -57,12 +70,15 @@ $(function() {
 			var $video = $('#video');
 			$video[0].src = path;
 			$video.mediaelementplayer({
-				features: ['playpause', 'gesture', 'volume', 'current', 'progress', 'duration', 'spacer', 'speed', 'fullscreen'],
+				features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'spacer', 'tracks', 'speed', 'volume', 'fullscreen'],
 				renderers: ['vod'],
 				clickToPlayPause: false,
 				timeAndDurationSeparator: '<span> / </span>',
-				success: function (mediaElement2, domObject) {
+				success: function (mediaElement2, domObject, instance) {
 					mediaElement = mediaElement2;
+					videodom = domObject;
+					videoplayer = instance;
+					loadSubtitle(path);
 					mediaElement.play();
 				},
 				error: function (mediaeElement, err) {

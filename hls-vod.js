@@ -14,7 +14,8 @@ var express = require('express');
 var serveStatic = require('serve-static');
 var bodyParser = require('body-parser');
 var socketIo = require('socket.io');
-
+var srt2vtt = require('srt-to-vtt');
+var ass2vtt = require('ass-to-vtt');
 // Parameters
 var listenPort = 4040;
 var audioBitrate = 128;
@@ -575,7 +576,7 @@ function browseDir(browsePath, response) {
 						var extName = path.extname(file).toLowerCase();
 						if (videoExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'video';
-							fileObj.path = encodeURIComponent(relPath) + '.mp4';
+							fileObj.path = encodeURIComponent(relPath);
 						}
 						else if (audioExtensions.indexOf(extName) != -1) {
 							fileObj.type = 'audio';
@@ -677,7 +678,30 @@ function handleImageRequest(relPath, request, response) {
 	readStream.pipe(response);
 }
 
-
+function handleSubtitlesRequest(relPath, request, response) {
+	var file = path.join('/', relPath);
+	var filePath = path.join(rootPath, file).replace(/\.[^/.]+$/, '');
+	console.log(filePath);
+	var srtsub = filePath + '.srt';
+	var asssub = filePath + '.ass';
+	console.log(srtsub);
+	console.log(asssub);
+	if (fs.existsSync(srtsub)) {
+		response.writeHead(200, {'Content-Type': 'text/vtt'});
+		fs.createReadStream(srtsub)
+			.pipe(srt2vtt())
+			.pipe(response);
+	} else if (fs.existsSync(asssub)) {
+		response.writeHead(200, {'Content-Type': 'text/vtt'});
+		fs.createReadStream(asssub)
+			.pipe(ass2vtt())
+			.pipe(response);
+	} else {
+		response.writeHead(404);
+		response.end();
+	}
+	
+}
 function init() {
 	function exitWithUsage(argv) {
 		console.log(
@@ -787,6 +811,7 @@ function initExpress() {
 		var filePath = decodeURIComponent(request.params[0]);
 		handleHTTPMp4Request(filePath, request, response);
 	});
+	
 	app.get(/^\/thumbnail\//, function(request, response) {
 		var file = path.relative('/thumbnail/', decodeURIComponent(request.path));
 		handleThumbnailRequest(file, response);
@@ -828,7 +853,12 @@ function initExpress() {
 		relPath = Buffer.from(relPath, 'base64').toString('utf8');
 		handleImageRequest(relPath, request, response);
 	});
-		
+
+	app.get(/^\/subtitles\//, function(request, response) {
+		var relPath = path.relative('/subtitles', decodeURIComponent(request.path));
+		handleSubtitlesRequest(relPath, request, response);
+	});
+	
 	app.post(/^\/settings/, function(request, response) {
 		console.log(request.body);
 
@@ -857,7 +887,7 @@ function initExpress() {
 		socket.on('start', function (data) {
 			if (debug)
 				console.log(socket.id);
-			var match = /^(.+).mp4/.exec(data.file);
+			var match = /^(.+)/.exec(data.file);
 			if (match) {
 				handleWSMp4Request(decodeURIComponent(match[1]), data.offset, data.speed, socket);
 			}
