@@ -255,9 +255,6 @@ function startWSTranscoding(file, offset, speed, info, socket){
 	});
 	
 	encoderChild.stdout.on('data', function(data) {
-		if (debug) {
-			console.log(data.length);
-		}
 		socket.emit('data', {seq : seq++, buffer : data});
 		check_ack();
 	});

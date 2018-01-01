@@ -192,7 +192,7 @@ $(function() {
 					}
 
 					if (file.type == 'video' || file.type == 'audio') {
-						var infoLink = $('<a  />').attr('href', '/info' + file.relPath).text('Information');
+						var infoLink = $('<a  />').attr('href', '/info/' + encodeURIComponent(file.relPath)).text('Information');
 						infoLink.click(function(event) {
 							$.get(this.href,function(rsp){
 								$("#mediainfo .modal-body p").html(rsp);
@@ -204,7 +204,7 @@ $(function() {
 					}
 
 					if (file.type != 'directory' ) {
-						var delLink = $('<a  />').attr('href', '/del' + file.relPath).text('Delete');
+						var delLink = $('<a  />').attr('href', '/del/' + encodeURIComponent(file.relPath)).text('Delete');
 						delLink.click(function(event) {
 							if (window.confirm("Delete\n" + file.relPath +"\nAre you sure?")) {
 								$.get(this.href, function(){
