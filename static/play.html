@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<title></title>
+	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+	<meta name="format-detection" content="telephone=no" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+
+	<link rel="stylesheet" href="mediaelement/build/mediaelementplayer.css" />
+	<link rel="stylesheet" href="mediaelement-plugins/dist/speed/speed.css">
+	<link rel="stylesheet" href="mediaelement-plugins/dist/gesture/gesture.css">
+	<link rel="stylesheet" href="mediaelement-plugins/dist/spacer/spacer.css">
+	<link rel="stylesheet" href="mediaelement-plugins/dist/toggle/toggle.css">
+
+	<script type="text/javascript" src="hammer.min.js"></script>
+
+	<script src="mediaelement/build/mediaelement-and-player.js"></script>
+	<script src="mediaelement-plugins/dist/speed/speed.js"></script>
+	<script src="mediaelement-plugins/dist/gesture/gesture.js"></script>
+	<script src="mediaelement-plugins/dist/spacer/spacer.js"></script>
+	<script src="mediaelement-plugins/dist/toggle/toggle.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+
+</head>
+
+<body>
+	<video id="player" style="width:100%;height:100%;" tabindex="0" autoplay>
+		<track kind="subtitles" src="" srclang="en"/>
+	</video>
+	<script type="text/javascript">
+		function ready(callback){
+			if (document.readyState!='loading') callback();
+			else if (document.addEventListener) document.addEventListener('DOMContentLoaded', callback);
+			else document.attachEvent('onreadystatechange', function(){
+				if (document.readyState=='complete') callback();
+			});
+		}
+		
+		ready(function(){
+			var url = window.location.href;
+			var param = url.split('?path=');
+			if (param.length == 2) {
+				var ele = document.getElementById('player');
+				ele.src = param[1];
+				var player = new MediaElementPlayer('player', {
+					features: ['playpause', 'gesture', 'current', 'progress', 'duration', 'spacer', 'tracks', 'speed', 'volume', 'toggle', 'fullscreen'],
+					renderers: ['vod'],
+					clickToPlayPause: false,
+					timeAndDurationSeparator: '<span> / </span>',
+					success: function(mediaElement2, domObject, instance) {
+						while(ele.children.length) {
+							ele.removeChild(ele.firstElementChild);
+						}
+						const track = document.createElement('track');
+						track.kind = 'subtitles';
+						track.label = 'Default';
+						track.src = '/sub/' + param[1];
+						track.srclang = 'en';
+						ele.appendChild(track);
+						instance.rebuildtracks();
+						mediaElement2.play();
+					},
+					error: function (mediaeElement, err) {
+						console.log('Error loading media element');
+					}
+				});
+			}
+		});
+	</script>
+</div>
+</body>
+</html>
