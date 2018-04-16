@@ -47,24 +47,33 @@ function startWSTranscoding(file, offset, speed, info, socket){
 	var setpts = 1.0;
 	var fps = 30;
 	switch(speed) {
-		case 4:
+		case 16:
 			atempo.push('atempo=2');
 			setpts = setpts / 2;
-		case 3:
+		case 8:
+			atempo.push('atempo=2');
+			setpts = setpts / 2;
+		case 4:
 			atempo.push('atempo=2');
 			setpts = setpts / 2;
 		case 2:
 			atempo.push('atempo=2');
 			setpts = setpts / 2;
-		case 1:
-			atempo.push('atempo=2');
-			setpts = setpts / 2;
 			fps *= 2;
 			break;
+		case 1:
+			break;
+		case 1.25:
+			setpts = setpts / speed;
+			atempo.push('atempo=' + speed);
+			break;
+		case 1.56:
+			setpts = 0.64;
+			atempo.push('atempo=' + 1.5625);
 		default:
 			break;
 	}
-
+	
 	switch(targetWidth) {
 	case 240:
 		audioBitrate = 32;
@@ -92,7 +101,7 @@ function startWSTranscoding(file, offset, speed, info, socket){
 		'-vf', 'scale=min(' + targetWidth + '\\, iw):-2,setpts=' + setpts_opt + '*PTS', '-r',  fps,
 		'-vcodec', 'libx264', '-profile:v', 'baseline', '-preset:v', 'ultrafast', '-tune', 'zerolatency', '-crf', targetQuality, '-g', gop,
 		'-x264opts', 'level=3.0', '-pix_fmt', 'yuv420p',
-		'-threads', '0', '-flags', '+global_header', //'-map', '0', /*'-v', 'error',*/
+		'-threads', '0', '-flags', '+global_header', '-v', '0', /* '-map', '0', '-v', 'error',*/
 		'-f', 'mp4', '-reset_timestamps', '1', '-movflags', 'empty_moov+frag_keyframe+default_base_moof', 'pipe:1'
 	];
 	var encoderChild = childProcess.spawn(transcoderPath, args, {env: process.env});
@@ -228,35 +237,47 @@ function handleWSMp4Request(file, offset, speed, socket){
 	}
 }
 
-function handleSubtitlesRequest(request, response) {
-	var file = path.join('/', decodeURIComponent(request.path));
-	var filePath = path.join(rootPath, file).replace(/\.[^/.]+$/, '');
-	console.log(filePath);
-	var lookup = [];
-	var find = false;
-	lookup.push({type : 'srt', file : filePath + '.srt'});
-	lookup.push({type : 'srt', file : filePath + '.zh.srt'});
-	lookup.push({type : 'ass', file : filePath + '.ass'});
-	lookup.push({type : 'ass', file : filePath + '.zh.ass'});
-	
-	response.writeHead(200, {'Content-Type': 'text/vtt'});
-	for (i in lookup) {
-		var sub = lookup[i];
-		console.log(sub.file);
-		if (fs.existsSync(sub.file)) {
-			find = true;
-			if (sub.type == 'srt') {
-				fs.createReadStream(sub.file)
-					.pipe(srt2vtt())
-					.pipe(response);
-			} else if (sub.type == 'ass') {
-				fs.createReadStream(sub.file)
-					.pipe(ass2vtt())
-					.pipe(response);
+function findSubtitles(filepath)
+{
+	var dir = path.dirname(filepath);
+	var videofile = path.basename(filepath).replace(/\.[^/.]+$/, '')+'.';
+	var relDir = path.join(rootPath, dir);
+	files = fs.readdirSync(relDir);
+	for (i in files) {
+		var file = files[i];
+		var extName = path.extname(file).toLowerCase();
+		if (subtitleExtensions.indexOf(extName) != -1) {
+			if (file.startsWith(videofile)) {
+				return path.join(dir, file);
 			}
 		}
 	}
+	return null;
+}
+
+function handleSubtitlesRequest(request, response) {
+	var file = path.join('/', decodeURIComponent(request.path));
+	var find = false;
+	response.writeHead(200, {'Content-Type': 'text/vtt'});
+	var subtitle = findSubtitles(file);
+	if (subtitle) {
+		find = true;
+		var subtitlePath = path.join(rootPath, subtitle);
+		var ext = path.extname(subtitlePath);
+		if (ext == '.ass') {
+			fs.createReadStream(subtitlePath)
+			.pipe(ass2vtt())
+			.pipe(response);
+		} else if (ext =='.srt') {
+			fs.createReadStream(subtitlePath)
+			.pipe(srt2vtt())
+			.pipe(response);
+		} else {
+			console.log('Wrong Subtitles' + ext);
+		}
+	}
 	if (!find) {
+		console.log('No Subtitles');
 		response.end();
 	}
 	
@@ -395,7 +416,8 @@ function xuiSetConf(request, response) {
 }
 
 function handleXUIRequest(request, response) {
-	console.log(request.body);
+	if (debug)
+		console.log(request.body);
 	switch(request.body.action){
 		case "list":
 			xuiList(request, response);

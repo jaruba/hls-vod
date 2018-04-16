@@ -1,0 +1,27 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>XVOD</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="language" content="zh_CN" />
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="viewport" content="minimal-ui, width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<script>
+	var XVODURL = '';
+	var xui_ini = {
+        appPath:"assets/"
+	}
+</script>
+</head>
+<body>
+<div id='loading' style="top:0;left:0; right:0; bottom:0;position:absolute;margin:auto">
+<img style="top:0;left:0; right:0; bottom:0;position:absolute;margin:auto" src="assets/loading.gif" alt="Loading..." />
+</div>
+<link rel="stylesheet" href="assets/appearance/vista/theme.css" type="text/css" />
+<script type="text/javascript" src="assets/js/xui-debug.js"></script>
+<script type="text/javascript" src="assets/App/utils.js"></script>
+<script type="text/javascript">
+xui.launch('App.SocketVod',function(){xui('loading').hide();},'cn','vista');
+</script>
+</body>
+</html>
