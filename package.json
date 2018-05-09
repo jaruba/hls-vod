@@ -10,6 +10,7 @@
     "srt-to-vtt": "^1.1.1",
     "underscore": "^1.8.3",
     "validator": "0.4.19",
-    "wrench": "1.4.4"
+    "wrench": "1.4.4",
+    "dlnacasts": "^0.1.0"
   }
 }

@@ -13,6 +13,8 @@ var bodyParser = require('body-parser');
 var socketIo = require('socket.io');
 var srt2vtt = require('srt-to-vtt');
 var ass2vtt = require('ass-to-vtt');
+var dlnacasts = require('dlnacasts')()
+
 // Parameters
 var listenPort = 4040;
 var audioBitrate = 128;
@@ -30,6 +32,7 @@ var audioExtensions = ['.mp3', '.aac', '.m4a'];
 var imageExtensions = ['.jpg', '.png', '.bmp', '.jpeg', '.gif'];
 var subtitleExtensions = ['.srt', '.ass'];
 var io = null;
+var isHttps = false;
 
 function convertSecToTime(sec){
 	var date = new Date(null);
@@ -280,9 +283,19 @@ function handleSubtitlesRequest(request, response) {
 		console.log('No Subtitles');
 		response.end();
 	}
-	
 }
 
+function handleRawRequest(request, response) {
+	var requestPath = Buffer.from(decodeURIComponent(request.params[0]), 'base64').toString('utf8');
+	var browsePath = path.join('/', requestPath);
+	var fsPath = path.join(rootPath, browsePath);
+	if (fs.existsSync(fsPath)) {
+		response.sendFile(fsPath);
+	} else {
+		response.writeHead(404);
+		response.end();
+	}
+}
 
 function xuiResponse(request, response, data) {
 	if (request.body.callback) {
@@ -298,9 +311,82 @@ function xuiResponse(request, response, data) {
 	response.end();
 }
 
+function xuiStop(request, response) {
+	var players = dlnacasts.players;
+	var find = false;
+	for (i in players) {
+		var player = players[i];
+		if (player.xml == request.body.player) {
+			if (player.client) {
+				player.stop(function(){
+					xuiResponse(request, response, {msg:"success"});
+				});
+				find = true;
+				break;
+			}
+		}
+	}
+	if (!find) {
+		xuiResponse(request, response, {msg:"fail"});
+	}
+}
+
+function xuiPlay(request, response) {
+	var file = path.join('/', request.body.path);
+	var players = dlnacasts.players;
+	var find = false;
+	console.log(path.basename(file));
+	for (i in players) {
+		var player = players[i];
+		if (player.xml == request.body.player) {
+			var play = function() {
+				var opts = {
+					title : 'NodeCast'
+				};
+				var subtitles = findSubtitles(file);
+				if (subtitles) {
+					subtitles = (isHttps ? 'https://' : 'http://') + request.headers.host + '/raw/' + encodeURIComponent(subtitles);
+					opts.subtitles = [ subtitles ];
+				}
+				player.play((isHttps ? 'https://' : 'http://') + request.headers.host + '/raw2/' + encodeURIComponent(Buffer.from(file).toString('base64')) + '/' + encodeURIComponent(path.basename(file)), opts, function(){
+					xuiResponse(request, response, {msg:"success"});
+				});
+			}
+			
+			if (player.client) {
+				player.stop(play);
+			} else {
+				play();
+			}
+			find = true;
+			break;
+		}
+	}
+	if (!find) {
+		xuiResponse(request, response, {msg:"fail"});
+	}
+	
+}
+
+function xuiDiscovery(request, response) {
+	dlnacasts.update();
+	var players = dlnacasts.players;
+	var items = [];
+	for (i in players) {
+		var player = players[i];
+		items.push({
+			id : i,
+			caption: player.name,
+			xml: player.xml
+		});
+	}
+	
+	xuiResponse(request, response, {msg:"success",items:items});
+}
+
 function xuiList(request, response) {
-	browsePath = path.join('/', request.body.path); // Remove ".." etc
-	fsBrowsePath = path.join(rootPath, browsePath);
+	var browsePath = path.join('/', request.body.path); // Remove ".." etc
+	var fsBrowsePath = path.join(rootPath, browsePath);
 
 	var fileList = [];
 
@@ -341,6 +427,7 @@ function xuiList(request, response) {
 					fileObj.image = '@xui_ini.appPath@image/file.png'
 				}
 				fileObj.path = path.join(browsePath, file);
+				fileObj.base64 = Buffer.from(fileObj.path).toString('base64');
 			} else if (stats.isDirectory()) {
 				fileObj.type = 'directory';
 				fileObj.path = path.join(browsePath, file);
@@ -348,6 +435,18 @@ function xuiList(request, response) {
 			}
 
 			fileList.push(fileObj);
+		});
+		fileList.sort(function(a, b) {
+			if (a.type == 'directory') {
+				if (a.type == b.type)
+					return a.caption.localeCompare(b.caption);
+				else
+					return -1;
+			} else if (b.type == 'directory') {
+				return 1;
+			} else {
+				return a.caption.localeCompare(b.caption);
+			}
 		});
 		var data = {
 			msg : 'success',
@@ -433,6 +532,15 @@ function handleXUIRequest(request, response) {
 			break;
 		case "set_conf":
 			xuiSetConf(request, response);
+			break;
+		case "discovery":
+			xuiDiscovery(request, response);
+			break;
+		case "play":
+			xuiPlay(request, response);
+			break;
+		case "stop":
+			xuiStop(request, response);
 			break;
 		default:
 			response.writeHead(404);
@@ -532,6 +640,7 @@ function initExpress() {
 			cert: fs.readFileSync(cert)
 		};
 		server = https.createServer(options, app);
+		isHttps = true;
 	} else {
 		server = http.createServer(app);
 	}
@@ -549,13 +658,11 @@ function initExpress() {
 	
 	app.use('/raw/', serveStatic(rootPath));
 	
-	app.post('/xui', function(request, response) {
-		handleXUIRequest(request, response);
-	});
+	app.use(/^\/raw2\/([^/]*)\/.*/, handleRawRequest);
+	
+	app.post('/xui', handleXUIRequest);
 
-	app.use('/sub/', function(request, response) {
-		handleSubtitlesRequest(request, response);
-	});
+	app.use('/sub/', handleSubtitlesRequest);
 
 	io.on('connection', function (socket) {
 		socket.on('start', function (data) {

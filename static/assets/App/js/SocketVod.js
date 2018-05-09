@@ -13,6 +13,7 @@ Class('App.SocketVod', 'xui.Com',{
 		initialize : function(){
 			var ns=this;
 			ns._cwd = '';
+			ns._player = '';
 		},
 		// 初始化内部控件（通过界面编辑器生成的代码，大部分是界面控件）
 		// *** 如果您不是非常熟悉XUI框架，请慎重手工改变本函数的代码 ***
@@ -52,8 +53,8 @@ Class('App.SocketVod', 'xui.Com',{
 				.setHost(host,"header")
 				.setDock("top")
 				.setHeight(30)
-			);
-
+				);
+			
 			host.header.append(
 				(new xui.UI.ToolBar())
 				.setHost(host,"toolbar")
@@ -76,12 +77,28 @@ Class('App.SocketVod', 'xui.Com',{
 							.onChange("_filter_onchange")
 						}
 					]
+				},{
+					"id":"grp2",
+					"sub":[
+						{
+							"id":"filter",
+							object: new xui.UI.ComboInput()
+							.setHost(host,"device")
+							.setWidth(245)
+							.setLabelSize(60)
+							.setLabelCaption("设备：")
+							.setType("listbox")
+							.setShowDirtyMark(false)
+							.beforePopShow("_device_beforepopshow")
+							.onChange("_device_onchange")
+						}
+					]
 				}])
 				.onClick("_toolbar_onclick")
 				.setDisableHoverEffect(true)
 				.setHandler(false)
-			);
-
+				);
+			
 			host.dialog.append(
 				(new xui.UI.Block())
 				.setHost(host,"footer")
@@ -185,6 +202,12 @@ Class('App.SocketVod', 'xui.Com',{
 				xui(ns.filter).query('input').focus();
 				return false;
 			});
+
+			xui.Event.keyboardHook("o",0,0,0,function(){
+				xui.ComFactory.newCom("App.VideoSetting",function(){
+					this.show();
+				});
+			});
 			
 			if(_.isDefined(ns.properties.path)){
 				ns.loadPath(ns.properties.path);
@@ -225,6 +248,7 @@ Class('App.SocketVod', 'xui.Com',{
 							this.show();
 						},null,{
 							path:XVODURL+'raw/'+encodeURIComponent(item.path)
+							//path:XVODURL+'raw2/'+encodeURIComponent(item.base64)+'/'+encodeURIComponent(item.caption)
 						});
 					}
 					_.asyRun(f);
@@ -265,32 +289,40 @@ Class('App.SocketVod', 'xui.Com',{
 					id:"info",
 					caption:"编码信息"
 				});
+				items.push({
+					id:"play",
+					caption:"播放"
+				});
 			}
 			context.setItems(items);
 			var callback=function(prf,i){
 				switch(i.id){
 				case "del":
 					xui.confirm("确认","删除\""+item.caption+"\"？",function(){
-						var paras={
+					var paras={
 							action:"del",
 							path:item.path
-						}
-						tree.busy();
+					}
+					tree.busy();
 						xui.request(XVODURL+"xui", paras, function(rsp){
 							if(rsp&&rsp.msg&&rsp.msg=='success'){
 								ns.loadPath(ns._cwd);
 							}else{
 								alert('删除失败');
-								tree.free();
+						tree.free();
 							}
 							
-						},function(){
-							tree.free();
-						},null,{method:'post'});
+					},function(){
+						tree.free();
+					},null,{method:'post'});
 					});
 					break;
 				case "raw":
-					var rawUrl=XVODURL+'raw/'+encodeURIComponent(item.path);
+					var vodurl=XVODURL;
+					if (vodurl=='') {
+						vodurl=window.location.href;
+					}
+					var rawUrl=vodurl+'raw2/'+encodeURIComponent(item.base64)+'/'+encodeURIComponent(item.caption);
 					var textArea=document.createElement("textarea");
 					textArea.value=rawUrl;
 					textArea.style.opacity='0';
@@ -314,6 +346,19 @@ Class('App.SocketVod', 'xui.Com',{
 								this.show();
 							},null,{info:rsp.info});
 						}
+						tree.free();
+					},function(){
+						tree.free();
+					},null,{method:'post'});
+					break;
+				case "play":
+					var paras={
+						action:"play",
+						path:item.path,
+						player:ns._player
+					}
+					tree.busy();
+					xui.request(XVODURL+"xui", paras, function(rsp){
 						tree.free();
 					},function(){
 						tree.free();
@@ -355,7 +400,6 @@ Class('App.SocketVod', 'xui.Com',{
 								alert('删除失败');
 								tree.free();
 							}
-							
 						},function(){
 							tree.free();
 						},null,{method:'post'});
@@ -381,6 +425,38 @@ Class('App.SocketVod', 'xui.Com',{
 					}
 				});
 			}
+		},
+		_device_beforepopshow:function(profile,popCtl){
+			var ns=this, uictrl=profile.boxing(),elem = popCtl.boxing();
+			var paras={
+				action:"discovery"
+			}
+
+			uictrl.busy();
+			xui.request(XVODURL+"xui", paras, function(rsp){
+				if(rsp&&rsp.msg&&rsp.msg=='success'){
+					uictrl.setItems(rsp.items);
+				}
+				uictrl.free();
+			},function(){
+				uictrl.free();
+			},null,{method:'post'});
+		},
+		_device_onchange:function(profile,oldValue,newValue,force,tag){
+			var ns=this,item=profile.getItemByItemId(newValue);
+			if(item){
+				ns._player=item.xml;
+			}
+		},
+		_device_stop:function(){
+			var ns=this;
+			var paras={
+				action:"stop",
+				player:ns._player
+			}
+			xui.request(XVODURL+"xui", paras, function(rsp){
+			},function(){
+			},null,{method:'post'});
 		}
 	
 	},

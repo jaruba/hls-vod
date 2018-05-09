@@ -1,18 +1,11 @@
 Class('App.VideoSetting', 'xui.Com',{
 	Instance:{
+		autoDestroy : true,
 		iniComponents : function(){
 			// [[Code created by CrossUI RAD Studio
 			var host=this, children=[], append=function(child){children.push(child.get(0));};
 			
 			append(
-				xui.create("xui.UI.Pane")
-				.setHost(host,"ctl_pane10")
-				.setDock("fill")
-				.setWidth(100)
-				.setHeight(100)
-			);
-			
-			host.ctl_pane10.append(
 				xui.create("xui.UI.Dialog")
 				.setHost(host,"dialog")
 				.setAutoTips(false)
