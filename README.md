@@ -13,7 +13,7 @@ Requirements
 
 Installation
 ------------
-- git clone --recursive -b live-vod ...
+- git clone --recursive -b xvod ...
 - cd hls-vod
 - npm install
 
