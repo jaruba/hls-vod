@@ -67,7 +67,8 @@ function spawnProbeProcess(ffprobePath, file, playlistPath, queryString, infohas
 		'-i', file, '-show_frames', 
 		'-skip_frame', 'nokey',
 		'-select_streams', 'v',
-		'-show_entries', 'frame=pkt_pts_time'
+		'-show_entries',
+		'frame=pkt_dts_time' // 'frame=pkt_pts_time' works for everything except avi
 	]
 
 	var startTime = Date.now()
@@ -139,12 +140,13 @@ function pollForPlaylist(file, response, playlistPath, queryString, videoWidth, 
 	var numTries = 0;
 
 	function checkPlaylistString(string, cb) {
-		cb(!!(string.split(/\n/).length -1 >= 12)) // at least 12 lines (3 segments)
+		cb(!!(string.split(/\n/).length >= 12)) // at least 12 lines (3 segments)
 	}
 
 	var fromMemory = function() {
 		checkPlaylistString(m3u8lists[playlistPath] || '', function(found) {
 			if (found) {
+				log('Sending playlist from memory')
 				response.setHeader('Content-Type', 'application/x-mpegURL');
 				response.write(m3u8lists[playlistPath].replace('%startTime%', startAt).replace(new RegExp('%queryString%', 'g'), queryString).replace(new RegExp('%25videoWidth%25', 'g'), videoWidth));
 				response.end();
@@ -154,7 +156,7 @@ function pollForPlaylist(file, response, playlistPath, queryString, videoWidth, 
 					response.writeHead(500);
 					response.end();
 				} else {
-					log('Retrying playlist file...')
+					log('Retry getting playlist from memory...')
 					numTries++
 					setTimeout(fromMemory, playlistRetryDelay)
 				}
@@ -164,6 +166,8 @@ function pollForPlaylist(file, response, playlistPath, queryString, videoWidth, 
 
 	var fromDisk = function() {
 		var readStream = fs.createReadStream(playlistPath);
+
+		log('Sending playlist from disk')
 
 		readStream.on('error', function(err) {
 			log(err);
@@ -228,12 +232,12 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 		'-i', file,
 		'-sn',
 		'-async', '0',
-		'-acodec',(urlQuery.needsAudio == -1 ? urlQuery.audio : 'copy'),
+		'-acodec',(urlQuery.shouldAudio > -1 ? urlQuery.audio : 'copy'),
 		'-b:a', urlQuery.ab,
 		'-ar', '44100',
 		'-ac', '2',
 		'-r',  '30',
-		'-vcodec', (urlQuery.needsVideo == -1 || urlQuery.resized == 'true' || urlQuery.needsAudio > -1 ? urlQuery.video : 'copy'),
+		'-vcodec', (urlQuery.shouldVideo > -1 ? urlQuery.video : 'copy'),
 		'-b:v', urlQuery.vb,
 		'-profile:v', 'baseline',
 		'-preset:v' ,'ultrafast',
@@ -247,8 +251,12 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 		'-muxdelay', '0',
 		'-v', '0',
 		'-map', '0:v:' + (urlQuery.needsVideo > -1 ? urlQuery.needsVideo : '0'),
-		'-map', '0:a:' + (urlQuery.needsAudio > -1 ? urlQuery.needsAudio : '0')
+		'-map', '0:a:' + (urlQuery.forAudio > -1 ? urlQuery.forAudio : urlQuery.needsAudio > -1 ? urlQuery.needsAudio : '0')
 	];
+
+	if (urlQuery.copyts > -1) {
+		args.push('-copyts')
+	}
 
 	if (urlQuery.resized == 'true') {
 		args.push('-vf')
