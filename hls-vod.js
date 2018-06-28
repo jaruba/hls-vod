@@ -281,9 +281,6 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 		args.push('scale=w=' + urlQuery.targetWidth + ':h=trunc(ow/a/2)*2')
 	}
 
-	console.log('args')
-	console.log(args)
-
 	args.push('pipe:1')
 
 	var encoderChild = childProcess.spawn(transcoderPath, args, {cwd: outputPath, env: process.env});
