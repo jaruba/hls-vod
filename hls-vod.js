@@ -226,10 +226,26 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 
 	var startTime = convertSecToTime(start);
 	var durationTime = convertSecToTime(duration);
-	var args = [
+	var argsInput = [
 		'-ss', startTime,
 		'-t', durationTime,
-		'-i', file,
+		'-i', file
+	]
+
+	var argsInput2 = []
+
+	urlQuery.audioDelay = parseFloat(urlQuery.audioDelay)
+
+	if (urlQuery.audioDelay) {
+		argsInput2 = [
+			'-ss', startTime,
+			'-t', durationTime,
+			'-itsoffset', urlQuery.audioDelay,
+			'-i', file,
+		]
+	}
+
+	var argsOutput = [
 		'-sn',
 		'-async', '0',
 		'-acodec',(urlQuery.shouldAudio > -1 ? urlQuery.audio : 'copy'),
@@ -251,8 +267,10 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 		'-muxdelay', '0',
 		'-v', '0',
 		'-map', '0:v:' + (urlQuery.needsVideo > -1 ? urlQuery.needsVideo : '0'),
-		'-map', '0:a:' + (urlQuery.forAudio > -1 ? urlQuery.forAudio : urlQuery.needsAudio > -1 ? urlQuery.needsAudio : '0')
+		'-map', (urlQuery.audioDelay ? '1' : '0') + ':a:' + (urlQuery.forAudio > -1 ? urlQuery.forAudio : urlQuery.needsAudio > -1 ? urlQuery.needsAudio : '0')
 	];
+
+	var args = argsInput.concat(argsInput2).concat(argsOutput)
 
 	if (urlQuery.copyts > -1) {
 		args.push('-copyts')
@@ -262,6 +280,9 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 		args.push('-vf')
 		args.push('scale=w=' + urlQuery.targetWidth + ':h=trunc(ow/a/2)*2')
 	}
+
+	console.log('args')
+	console.log(args)
 
 	args.push('pipe:1')
 
