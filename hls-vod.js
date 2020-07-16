@@ -73,7 +73,7 @@ function spawnProbeProcess(ffprobePath, file, playlistPath, queryString, infohas
 
 	var startTime = Date.now()
 
-	var probeChild = childProcess.spawn(ffprobePath, args, {cwd: outputPath, env: process.env})
+	var probeChild = childProcess.spawn(ffprobePath, args, {env: process.env})
 
 	log(ffprobePath + ' ' + args.join(' '))
 
@@ -283,7 +283,7 @@ function handleSegmentRequest(transcoderPath, index, start, duration, file, requ
 
 	args.push('pipe:1')
 
-	var encoderChild = childProcess.spawn(transcoderPath, args, {cwd: outputPath, env: process.env});
+	var encoderChild = childProcess.spawn(transcoderPath, args, {env: process.env});
 
 	log(transcoderPath + ' ' + args.join(' '));
 
